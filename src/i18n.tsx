@@ -1,0 +1,310 @@
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import type { Exercise, LText } from './db';
+
+export type Lang = 'en' | 'hr';
+
+const en = {
+  appName: 'Gym Log',
+  tabWorkout: 'Workout',
+  tabHistory: 'History',
+  tabProgress: 'Progress',
+  tabBody: 'Body',
+  tabSettings: 'Settings',
+  today: 'Today',
+  addExercise: 'Add exercise',
+  emptyDay: 'Nothing logged for this day yet.',
+  kg: 'kg',
+  reps: 'Reps',
+  min: 'Min',
+  km: 'km',
+  add: 'Add',
+  lastTime: 'Last time',
+  search: 'Search…',
+  strength: 'Strength',
+  cardio: 'Cardio',
+  newExercise: 'New exercise',
+  name: 'Name',
+  type: 'Type',
+  create: 'Create',
+  cancel: 'Cancel',
+  close: 'Close',
+  delete: 'Delete',
+  sets: 'Sets',
+  best: 'Best',
+  historyEmpty: 'No workouts yet. Log your first one on the Workout tab.',
+  exercise: 'Exercise',
+  noData: 'Log this exercise on at least two days to see a chart.',
+  noExercisesLogged: 'Nothing logged yet. Progress shows up here once you log workouts.',
+  topWeight: 'Top weight',
+  est1rm: 'Est. 1RM',
+  volume: 'Volume',
+  maxReps: 'Max reps',
+  distance: 'Distance',
+  time: 'Time',
+  pace: 'Pace',
+  records: 'Personal records',
+  sessions: 'Sessions',
+  bodyWeight: 'Body weight',
+  date: 'Date',
+  save: 'Save',
+  latest: 'Latest',
+  change: 'Change',
+  sinceStart: 'since first entry',
+  bodyEmpty: 'Log your weight to start tracking it.',
+  language: 'Language',
+  backup: 'Backup',
+  backupHint: 'Your data is stored only on this phone. Export a backup now and then and keep it somewhere safe.',
+  export: 'Export backup',
+  import: 'Restore backup',
+  importConfirm: 'Replace all current data with this backup?',
+  importDone: 'Backup restored.',
+  importFail: 'That file is not a valid Gym Log backup.',
+  myExercises: 'My exercises',
+  myExercisesEmpty: 'Exercises you create appear here.',
+  cantDelete: 'This exercise has logged entries, so it can’t be deleted.',
+  confirmDelete: 'Delete this entry?',
+  confirmDeleteExercise: 'Delete this exercise?',
+  workouts: 'Workouts',
+  thisWeek: 'this week',
+  hold: 'Timed hold',
+  carry: 'Carry',
+  sec: 'Sec',
+  m: 'm',
+  assistKg: 'Assist kg',
+  assist: 'assist',
+  repsWord: 'reps',
+  longestHold: 'Longest hold',
+  assistance: 'Assistance',
+  leastAssist: 'Least assistance',
+  carryDistance: 'Distance',
+  startPlan: 'Start from plan',
+  choosePlan: 'Choose a plan',
+  plans: 'Plans',
+  plansEmpty: 'No plans yet.',
+  removePlan: 'Remove plan from this day?',
+  confirmDeletePlan: 'Delete this plan? Days that used it keep their logged sets.',
+  otherExercises: 'Other exercises',
+  notes: 'Notes',
+  rest: 'rest',
+  perSide: 'per side',
+  superset: 'Superset',
+  restTimer: 'Rest',
+  restDone: 'Rest over – next set!',
+  skip: 'Skip',
+  howTo: 'How to do it',
+  animHint: 'Tap the animation to pause it.',
+  watchVideo: 'Watch a video',
+  noAnim: 'There’s no animation for this exercise.',
+  holdStart: 'Start timer',
+  holdStop: 'Stop & save',
+  getReady: 'Get ready…',
+  defaultRest: 'Rest timer',
+  defaultRestHint: 'Starts after each set. Plans use their own rest times; this is for other exercises.',
+  off: 'Off',
+};
+
+type Dict = typeof en;
+
+const hr: Dict = {
+  appName: 'Dnevnik treninga',
+  tabWorkout: 'Trening',
+  tabHistory: 'Povijest',
+  tabProgress: 'Napredak',
+  tabBody: 'Tijelo',
+  tabSettings: 'Postavke',
+  today: 'Danas',
+  addExercise: 'Dodaj vježbu',
+  emptyDay: 'Za ovaj dan još nema unosa.',
+  kg: 'kg',
+  reps: 'Pon.',
+  min: 'Min',
+  km: 'km',
+  add: 'Dodaj',
+  lastTime: 'Prošli put',
+  search: 'Traži…',
+  strength: 'Snaga',
+  cardio: 'Kardio',
+  newExercise: 'Nova vježba',
+  name: 'Naziv',
+  type: 'Vrsta',
+  create: 'Stvori',
+  cancel: 'Odustani',
+  close: 'Zatvori',
+  delete: 'Obriši',
+  sets: 'Serije',
+  best: 'Najbolje',
+  historyEmpty: 'Još nema treninga. Upiši prvi na kartici Trening.',
+  exercise: 'Vježba',
+  noData: 'Upiši ovu vježbu barem dva dana da se prikaže graf.',
+  noExercisesLogged: 'Još nema unosa. Napredak će se pojaviti ovdje kad upišeš treninge.',
+  topWeight: 'Najveća težina',
+  est1rm: 'Proc. 1RM',
+  volume: 'Volumen',
+  maxReps: 'Najviše pon.',
+  distance: 'Udaljenost',
+  time: 'Vrijeme',
+  pace: 'Tempo',
+  records: 'Osobni rekordi',
+  sessions: 'Treninzi',
+  bodyWeight: 'Tjelesna težina',
+  date: 'Datum',
+  save: 'Spremi',
+  latest: 'Zadnje',
+  change: 'Promjena',
+  sinceStart: 'od prvog unosa',
+  bodyEmpty: 'Upiši svoju težinu da je počneš pratiti.',
+  language: 'Jezik',
+  backup: 'Sigurnosna kopija',
+  backupHint: 'Podaci se spremaju samo na ovom mobitelu. Povremeno izvezi kopiju i spremi je na sigurno.',
+  export: 'Izvezi kopiju',
+  import: 'Vrati kopiju',
+  importConfirm: 'Zamijeniti sve trenutne podatke ovom kopijom?',
+  importDone: 'Kopija je vraćena.',
+  importFail: 'Ta datoteka nije ispravna kopija Dnevnika treninga.',
+  myExercises: 'Moje vježbe',
+  myExercisesEmpty: 'Ovdje se pojavljuju vježbe koje stvoriš.',
+  cantDelete: 'Ova vježba ima unose pa se ne može obrisati.',
+  confirmDelete: 'Obrisati ovaj unos?',
+  confirmDeleteExercise: 'Obrisati ovu vježbu?',
+  workouts: 'Treninzi',
+  thisWeek: 'ovaj tjedan',
+  hold: 'Izdržaj',
+  carry: 'Nošenje',
+  sec: 'Sek',
+  m: 'm',
+  assistKg: 'Pomoć kg',
+  assist: 'pomoć',
+  repsWord: 'pon.',
+  longestHold: 'Najduži izdržaj',
+  assistance: 'Pomoć',
+  leastAssist: 'Najmanje pomoći',
+  carryDistance: 'Udaljenost',
+  startPlan: 'Započni po planu',
+  choosePlan: 'Odaberi plan',
+  plans: 'Planovi',
+  plansEmpty: 'Još nema planova.',
+  removePlan: 'Maknuti plan s ovog dana?',
+  confirmDeletePlan: 'Obrisati ovaj plan? Dani koji su ga koristili zadržavaju upisane serije.',
+  otherExercises: 'Ostale vježbe',
+  notes: 'Napomene',
+  rest: 'pauza',
+  perSide: 'po strani',
+  superset: 'Superset',
+  restTimer: 'Pauza',
+  restDone: 'Pauza gotova – sljedeća serija!',
+  skip: 'Preskoči',
+  howTo: 'Kako se radi',
+  animHint: 'Dodirni animaciju da je pauziraš.',
+  watchVideo: 'Pogledaj video',
+  noAnim: 'Za ovu vježbu nema animacije.',
+  holdStart: 'Pokreni štopericu',
+  holdStop: 'Stani i spremi',
+  getReady: 'Pripremi se…',
+  defaultRest: 'Tajmer za pauzu',
+  defaultRestHint: 'Pokreće se nakon svake serije. Planovi imaju svoje pauze; ovo vrijedi za ostale vježbe.',
+  off: 'Isklj.',
+};
+
+const exerciseNames: Record<string, [en: string, hr: string]> = {
+  squat: ['Squat', 'Čučanj'],
+  bench: ['Bench press', 'Potisak s klupe'],
+  deadlift: ['Deadlift', 'Mrtvo dizanje'],
+  ohp: ['Overhead press', 'Potisak iznad glave'],
+  row: ['Barbell row', 'Veslanje šipkom'],
+  pullup: ['Pull-up', 'Zgibovi'],
+  latPulldown: ['Lat pulldown', 'Povlačenje na lat spravi'],
+  dips: ['Dips', 'Propadanja'],
+  legPress: ['Leg press', 'Potisak nogama'],
+  lunge: ['Lunge', 'Iskorak'],
+  hipThrust: ['Hip thrust', 'Potisak kukovima'],
+  rdl: ['Romanian deadlift', 'Rumunjsko mrtvo dizanje'],
+  legCurl: ['Leg curl', 'Pregib nogu'],
+  legExtension: ['Leg extension', 'Ekstenzija nogu'],
+  calfRaise: ['Calf raise', 'Podizanje na prste'],
+  curl: ['Biceps curl', 'Pregib za biceps'],
+  triceps: ['Triceps extension', 'Ekstenzija za triceps'],
+  lateralRaise: ['Lateral raise', 'Odručenje'],
+  chestFly: ['Chest fly', 'Razvlačenje za prsa'],
+  assistedPullup: ['Assisted pull-up (neutral grip)', 'Zgibovi s pomoći (neutralni hvat)'],
+  dbRow: ['One-arm dumbbell row', 'Veslanje bučicom jednom rukom'],
+  dbOhp: ['Dumbbell overhead press', 'Potisak bučicama iznad glave'],
+  reverseFly: ['Bent-over dumbbell reverse fly', 'Razvlačenje bučicama u pretklonu'],
+  hangingKneeRaise: ['Hanging knee raise', 'Viseće podizanje koljena'],
+  plateCrunch: ['Weighted crunch (plate)', 'Crunch s pločom na podu'],
+  abWheel: ['Ab wheel (kneeling)', 'Ab wheel s koljena'],
+  woodchopper: ['Dumbbell woodchopper', 'Woodchopper s bučicom'],
+  deadBug: ['Dead bug', 'Dead bug'],
+  russianTwist: ['Russian twist', 'Russian twist'],
+  gluteBridge: ['Glute bridge', 'Glute bridge'],
+  plank: ['Plank', 'Plank'],
+  sidePlank: ['Side plank', 'Bočni plank'],
+  hollowHold: ['Hollow hold', 'Hollow hold'],
+  suitcaseCarry: ['One-arm dumbbell carry', 'Nošenje bučice jednom rukom'],
+  farmerCarry: ['Farmer’s carry', 'Farmerovo nošenje'],
+  running: ['Running', 'Trčanje'],
+  treadmill: ['Treadmill', 'Traka za trčanje'],
+  cycling: ['Cycling / bike', 'Bicikl'],
+  rowing: ['Rowing machine', 'Veslački ergometar'],
+  elliptical: ['Elliptical', 'Eliptični trenažer'],
+  stairs: ['Stair climber', 'Stepenice'],
+  walking: ['Walking', 'Hodanje'],
+  swimming: ['Swimming', 'Plivanje'],
+};
+
+interface I18n {
+  lang: Lang;
+  setLang: (l: Lang) => void;
+  t: Dict;
+  exName: (e: Exercise | undefined) => string;
+  /** English name (for video searches). */
+  enName: (e: Exercise) => string;
+  /** Picks the current language from a built-in two-language text. */
+  lt: (s: LText | undefined) => string;
+  fmtDate: (iso: string, opts?: Intl.DateTimeFormatOptions) => string;
+  fmtNum: (n: number, digits?: number) => string;
+}
+
+const Ctx = createContext<I18n | null>(null);
+
+function initialLang(): Lang {
+  try {
+    const saved = localStorage.getItem('lang');
+    if (saved === 'en' || saved === 'hr') return saved;
+  } catch { /* storage unavailable */ }
+  return navigator.language?.toLowerCase().startsWith('hr') ? 'hr' : 'en';
+}
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>(initialLang);
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    try { localStorage.setItem('lang', lang); } catch { /* ignore */ }
+  }, [lang]);
+
+  const locale = lang === 'hr' ? 'hr-HR' : 'en-GB';
+  const value: I18n = {
+    lang,
+    setLang: setLangState,
+    t: lang === 'hr' ? hr : en,
+    exName: (e) => {
+      if (!e) return '?';
+      if (e.key && exerciseNames[e.key]) return exerciseNames[e.key][lang === 'hr' ? 1 : 0];
+      return e.name ?? '?';
+    },
+    enName: (e) => (e.key && exerciseNames[e.key] ? exerciseNames[e.key][0] : e.name ?? ''),
+    lt: (s) => (s == null ? '' : typeof s === 'string' ? s : s[lang]),
+    fmtDate: (iso, opts = { weekday: 'short', day: 'numeric', month: 'short' }) =>
+      new Date(iso + 'T12:00:00').toLocaleDateString(locale, opts),
+    fmtNum: (n, digits = 1) => n.toLocaleString(locale, { maximumFractionDigits: digits }),
+  };
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useI18n() {
+  const c = useContext(Ctx);
+  if (!c) throw new Error('useI18n outside provider');
+  return c;
+}
