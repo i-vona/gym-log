@@ -8,6 +8,7 @@ import { useExerciseFormat } from '../exerciseFormat';
 import { ExerciseInfo } from '../components/ExerciseInfo';
 import { SetInputs, SetList, setCount, useSetLogger } from '../components/SetLogger';
 import { FocusView } from './FocusView';
+import { GeneratorView } from './GeneratorView';
 import { getDefaultRest, useTimer } from '../timer';
 import { recommendedRest } from '../rest';
 
@@ -24,6 +25,7 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
   // Exercises opened for this day that have no entries yet.
   const [pending, setPending] = useState<number[]>([]);
   const [focus, setFocus] = useState(false);
+  const [building, setBuilding] = useState(false);
 
   useEffect(() => setPending([]), [date]);
 
@@ -33,9 +35,10 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
   const plan = useLiveQuery(async () => (day?.planId ? db.plans.get(day.planId) : undefined), [day?.planId]);
   const exById = useMemo(() => new Map(exercises?.map((e) => [e.id!, e])), [exercises]);
   const exByKey = useMemo(() => new Map(exercises?.filter((e) => e.key).map((e) => [e.key!, e])), [exercises]);
+  const exOf = (it: PlanItem) => (it.ex ? exByKey.get(it.ex) : it.exId ? exById.get(it.exId) : undefined);
 
   const planExIds = new Set(
-    plan?.sections.flatMap((s) => s.items.map((it) => (it.ex ? exByKey.get(it.ex)?.id : undefined))).filter(Boolean),
+    plan?.sections.flatMap((s) => s.items.map((it) => exOf(it)?.id)).filter(Boolean),
   );
   const order: number[] = [];
   entries?.forEach((e) => { if (!order.includes(e.exerciseId)) order.push(e.exerciseId); });
@@ -119,7 +122,7 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
                 const group: ReactNode[] = [];
                 let j = i;
                 while (j < sec.items.length && sec.items[j].superset === it.superset) {
-                  const ex = exByKey.get(sec.items[j].ex!);
+                  const ex = exOf(sec.items[j]);
                   const last = sec.items[j + 1]?.superset !== it.superset;
                   if (ex) group.push(card(ex, sec.items[j], !last));
                   j++;
@@ -133,7 +136,7 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
                 i = j - 1;
                 continue;
               }
-              const ex = it.ex ? exByKey.get(it.ex) : undefined;
+              const ex = exOf(it);
               if (ex) blocks.push(card(ex, it));
             }
             return (
@@ -155,6 +158,7 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
         return ex ? card(ex) : null;
       })}
 
+      {!plan && <button className="primary wide start-btn" onClick={() => setBuilding(true)}>✨ {t.buildWorkout}</button>}
       <div className="row-actions">
         {!plan && <button className="ghost" onClick={() => setPicking('plan')}>{t.startPlan}</button>}
         <button className="primary" onClick={() => setPicking('exercise')}>+ {t.addExercise}</button>
@@ -174,13 +178,14 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
         />
       )}
       {picking === 'plan' && <PlanPicker onPick={attachPlan} onClose={() => setPicking(null)} />}
+      {building && <GeneratorView date={date} onClose={() => setBuilding(false)} onSaved={() => { setBuilding(false); setFocus(true); }} />}
       {focus && plan && (
         <FocusView
           plan={plan}
           date={date}
           day={day}
           entries={entries ?? []}
-          exByKey={exByKey}
+          exOf={exOf}
           onClose={() => setFocus(false)}
           onToggle={toggleDone}
         />

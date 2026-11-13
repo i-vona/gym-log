@@ -4,7 +4,7 @@ import { useI18n } from '../i18n';
 
 export function PlanPicker({ onPick, onClose }: { onPick: (id: number) => void; onClose: () => void }) {
   const { t, lt } = useI18n();
-  const plans = useLiveQuery(() => db.plans.toArray());
+  const plans = useLiveQuery(() => db.plans.filter((p) => !p.generated).toArray());
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>

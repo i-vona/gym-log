@@ -45,4 +45,9 @@ export const MUSCLES: Record<string, Targets> = {
   stairs: { p: ['cardio', 'glutes', 'quads'], s: ['calves'] },
   walking: { p: ['cardio', 'calves'], s: ['quads', 'glutes'] },
   swimming: { p: ['cardio', 'lats', 'shoulders'], s: ['triceps', 'abs'] },
+  bwSquat: { p: ['quads', 'glutes'], s: ['hamstrings'] },
+  gobletSquat: { p: ['quads', 'glutes'], s: ['abs', 'upperBack'] },
+  pushUp: { p: ['chest', 'triceps'], s: ['shoulders', 'abs'] },
+  dbBench: { p: ['chest', 'triceps'], s: ['shoulders'] },
+  dbRdl: { p: ['hamstrings', 'glutes'], s: ['lowerBack', 'forearms'] },
 };

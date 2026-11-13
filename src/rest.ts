@@ -28,6 +28,7 @@ const CATEGORY: Record<string, RestCategory> = {
   squat: 'compound', deadlift: 'compound', bench: 'compound', ohp: 'compound', row: 'compound',
   rdl: 'compound', legPress: 'compound', hipThrust: 'compound', pullup: 'compound', dips: 'compound',
   lunge: 'compound',
+  gobletSquat: 'moderate', pushUp: 'moderate', dbBench: 'moderate', dbRdl: 'moderate', bwSquat: 'light',
   assistedPullup: 'moderate', latPulldown: 'moderate', dbRow: 'moderate', dbOhp: 'moderate', gluteBridge: 'moderate',
   curl: 'isolation', triceps: 'isolation', chestFly: 'isolation', legCurl: 'isolation', legExtension: 'isolation',
   lateralRaise: 'light', reverseFly: 'light', calfRaise: 'light',

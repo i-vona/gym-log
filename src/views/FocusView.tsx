@@ -24,14 +24,14 @@ type Step =
     }
   | { kind: 'done' };
 
-function buildSteps(plan: Plan, exByKey: Map<string, Exercise>): Step[] {
+function buildSteps(plan: Plan, exOf: (it: PlanItem) => Exercise | undefined): Step[] {
   const steps: Step[] = [];
   plan.sections.forEach((sec, si) => {
     const checks = sec.items.flatMap((it, i) => (it.text ? [{ id: `${si}-${i}`, text: it.text }] : []));
     if (checks.length) steps.push({ kind: 'check', si, items: checks });
     const start = steps.length;
     for (const it of sec.items) {
-      const ex = it.ex ? exByKey.get(it.ex) : undefined;
+      const ex = exOf(it);
       if (ex) steps.push({ kind: 'ex', si, item: it, ex });
     }
     const exSteps = steps.slice(start).map((_, k) => start + k);
@@ -56,18 +56,18 @@ function buildSteps(plan: Plan, exByKey: Map<string, Exercise>): Step[] {
   return steps;
 }
 
-export function FocusView({ plan, date, day, entries, exByKey, onClose, onToggle }: {
+export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle }: {
   plan: Plan;
   date: string;
   day: Day | undefined;
   entries: Entry[];
-  exByKey: Map<string, Exercise>;
+  exOf: (it: PlanItem) => Exercise | undefined;
   onClose: () => void;
   onToggle: (id: string) => void;
 }) {
   const { t, lt, exName } = useI18n();
   const timer = useTimer();
-  const steps = useMemo(() => buildSteps(plan, exByKey), [plan, exByKey]);
+  const steps = useMemo(() => buildSteps(plan, exOf), [plan]); // eslint-disable-line react-hooks/exhaustive-deps
   const countFor = (ex: Exercise) => setCount(entries.filter((e) => e.exerciseId === ex.id), ex);
   const setsFor = (s: Step) => (s.kind === 'ex' ? s.item.sets ?? plan.sections[s.si].circuit?.rounds : undefined);
 

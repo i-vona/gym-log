@@ -356,4 +356,37 @@ export const MOVES: Record<string, Move> = {
       { t: 0, h: -10, ua: 90, fa: 60, ua2: -90, fa2: -110, th: 184, sh: 190, th2: 176, sh2: 172, at: ['hip', 70, 100] },
     ],
   },
+  bwSquat: {
+    frames: [
+      { t: 90, ua: -90, fa: -90, at: ['ankle', 100, A] },
+      { t: 55, ua: 0, fa: 0, th: 0, sh: -110, at: ['ankle', 100, A] },
+    ],
+  },
+  gobletSquat: {
+    props: [{ k: 'db', at: 'hand' }],
+    frames: [
+      { t: 90, ua: -100, fa: 75, at: ['ankle', 100, A] },
+      { t: 65, ua: -125, fa: 50, th: 0, sh: -112, at: ['ankle', 100, A] },
+    ],
+  },
+  pushUp: {
+    frames: [
+      { t: 155, ua: -90, fa: -90, th: -25, sh: -25, ft: -100, at: ['ankle', 165, 176] },
+      { t: 172, ua: 35, fa: -115, th: -8, sh: -8, ft: -100, at: ['ankle', 165, 176] },
+    ],
+  },
+  dbBench: {
+    props: [...bench(30, 120, 120), { k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
+    frames: [
+      { t: 180, ua: 90, fa: 90, th: -30, sh: -95, at: ['hip', 110, 113] },
+      { t: 180, ua: -80, fa: 90, th: -30, sh: -95, at: ['hip', 110, 113] },
+    ],
+  },
+  dbRdl: {
+    props: [{ k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
+    frames: [
+      { t: 90, ua: -85, fa: -85, th: -88, sh: -95, at: ['ankle', 100, A] },
+      { t: 15, ua: -90, fa: -90, th: -70, sh: -100, at: ['ankle', 100, A] },
+    ],
+  },
 };

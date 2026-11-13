@@ -8,7 +8,7 @@ export function SettingsView() {
   const { t, lang, setLang, exName, lt } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const custom = useLiveQuery(() => db.exercises.filter((e) => !e.key).toArray());
-  const plans = useLiveQuery(() => db.plans.toArray());
+  const plans = useLiveQuery(() => db.plans.filter((p) => !p.generated).toArray());
   const [rest, setRest] = useState(getDefaultRest);
 
   const deletePlan = async (id: number) => {

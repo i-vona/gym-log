@@ -49,6 +49,8 @@ export type LText = string | { en: string; hr: string };
 export interface PlanItem {
   /** Built-in exercise key → this item is logged as an exercise card. */
   ex?: string;
+  /** Or a custom exercise by id. */
+  exId?: number;
   /** Otherwise a plain checklist line (warm-up moves, stretching…). */
   text?: LText;
   sets?: number;
@@ -74,6 +76,8 @@ export interface Plan {
   key?: string;
   /** Version of a built-in plan; a higher version in code replaces the stored copy. */
   v?: number;
+  /** Made by the workout builder (hidden from the plan list unless kept). */
+  generated?: boolean;
   name: LText;
   sections: PlanSection[];
   notes?: LText[];
@@ -122,6 +126,11 @@ export const BUILTIN_EXERCISES: { key: string; type: ExerciseType; assisted?: bo
   { key: 'hollowHold', type: 'hold', bodyweight: true },
   { key: 'suitcaseCarry', type: 'carry', unilateral: true },
   { key: 'farmerCarry', type: 'carry' },
+  { key: 'bwSquat', type: 'strength', bodyweight: true },
+  { key: 'gobletSquat', type: 'strength' },
+  { key: 'pushUp', type: 'strength', bodyweight: true },
+  { key: 'dbBench', type: 'strength' },
+  { key: 'dbRdl', type: 'strength' },
   { key: 'running', type: 'cardio' },
   { key: 'treadmill', type: 'cardio' },
   { key: 'cycling', type: 'cardio' },
