@@ -9,6 +9,7 @@ export function ExercisePicker({ onPick, onClose }: { onPick: (id: number) => vo
   const [creating, setCreating] = useState(false);
   const [type, setType] = useState<ExerciseType>('strength');
   const [oneSide, setOneSide] = useState(false);
+  const [noLoad, setNoLoad] = useState(false);
 
   const exercises = useLiveQuery(() => db.exercises.toArray());
   const norm = (s: string) => s.toLocaleLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
@@ -19,7 +20,7 @@ export function ExercisePicker({ onPick, onClose }: { onPick: (id: number) => vo
   const create = async () => {
     const name = q.trim();
     if (!name) return;
-    const id = await db.exercises.add({ name, type, unilateral: type !== 'cardio' && oneSide });
+    const id = await db.exercises.add({ name, type, unilateral: type !== 'cardio' && oneSide, bodyweight: (type === 'strength' || type === 'hold') && noLoad });
     onPick(id as number);
   };
 
@@ -44,6 +45,12 @@ export function ExercisePicker({ onPick, onClose }: { onPick: (id: number) => vo
                 <button key={ty} className={type === ty ? 'on' : ''} onClick={() => setType(ty)}>{t[ty]}</button>
               ))}
             </div>
+            {(type === 'strength' || type === 'hold') && (
+              <label className="check">
+                <input type="checkbox" checked={noLoad} onChange={(e) => setNoLoad(e.target.checked)} />
+                <span>{t.noWeight}</span>
+              </label>
+            )}
             {type !== 'cardio' && (
               <label className="check">
                 <input type="checkbox" checked={oneSide} onChange={(e) => setOneSide(e.target.checked)} />

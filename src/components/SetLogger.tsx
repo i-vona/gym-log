@@ -3,7 +3,7 @@ import Dexie from 'dexie';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, parseNum, type Entry, type Exercise, type PlanItem } from '../db';
 import { useI18n } from '../i18n';
-import { FIELDS, planDefault, useExerciseFormat, type Field } from '../exerciseFormat';
+import { fieldsFor, planDefault, useExerciseFormat, type Field } from '../exerciseFormat';
 import { fmtClock } from '../timer';
 import { beep, finishedSignal, keepAwake, unlockAudio } from '../sound';
 
@@ -26,8 +26,10 @@ export function setCount(entries: Entry[], ex: Exercise) {
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function useSetLogger(exercise: Exercise, date: string, entries: Entry[], item: PlanItem | undefined, onLogged: () => void) {
-  const { fields, required } = FIELDS[exercise.type];
-  const [fa, fb] = fields;
+  const { fields, required } = fieldsFor(exercise);
+  // fb is the main field (reps/seconds/...); fa is the optional first one (kg, minutes), null for body-weight exercises.
+  const fb = fields[fields.length - 1];
+  const fa: Field | null = fields.length > 1 ? fields[0] : null;
   const uni = !!exercise.unilateral;
   const [a, setA] = useState('');
   const [b, setB] = useState('');
@@ -52,18 +54,19 @@ export function useSetLogger(exercise: Exercise, date: string, entries: Entry[],
   const srcL = sourceFor(uni ? 'L' : undefined);
   const srcR = sourceFor('R');
   useEffect(() => {
-    if (srcL) { setA(str(srcL[fa])); setB(str(srcL[fb])); }
+    if (srcL) { setA(fa ? str(srcL[fa]) : ''); setB(str(srcL[fb])); }
     else if (previous === null) { setA(''); setB(planDefault(item)); }
     if (uni) {
       const s = srcR ?? srcL;
-      if (s) { setAR(str(s[fa])); setBR(str(s[fb])); }
+      if (s) { setAR(fa ? str(s[fa]) : ''); setBR(str(s[fb])); }
       else if (previous === null) { setAR(''); setBR(planDefault(item)); }
     }
   }, [srcL?.id, srcR?.id, previous === null, exercise.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const valid = (v: Vals) => (required.length ? required.every((f) => v[f] != null) : v[fa] != null || v[fb] != null);
-  const valsL: Vals = { [fa]: parseNum(a), [fb]: parseNum(b) };
-  const valsR: Vals = { [fa]: parseNum(aR), [fb]: parseNum(bR) };
+  const valid = (v: Vals) => (required.length ? required.every((f) => v[f] != null) : (fa != null && v[fa] != null) || v[fb] != null);
+  const vals = (x: string, y: string): Vals => ({ ...(fa ? { [fa]: parseNum(x) } : {}), [fb]: parseNum(y) });
+  const valsL = vals(a, b);
+  const valsR = vals(aR, bR);
   const canAdd = uni ? valid(valsL) || valid(valsR) : valid(valsL);
 
   const record = (v: Vals, side: Side | undefined, at: number): Entry => {
@@ -110,10 +113,10 @@ export function SetInputs({ exercise, logger, item, big, addLabel }: {
 
   const inputs = (va: string, sa: (s: string) => void, vb: string, sb: (s: string) => void, showLabels: boolean) => (
     <>
-      <label>
+      {fa && <label>
         {showLabels && <span>{fieldLabel(fa, exercise)}</span>}
         <input inputMode="decimal" aria-label={fieldLabel(fa, exercise)} value={va} onChange={(e) => sa(e.target.value)} onFocus={(e) => e.target.select()} />
-      </label>
+      </label>}
       <label>
         {showLabels && <span>{fieldLabel(fb, exercise)}</span>}
         <input inputMode={fb === 'reps' ? 'numeric' : 'decimal'} aria-label={fieldLabel(fb, exercise)} value={vb} onChange={(e) => sb(e.target.value)} onFocus={(e) => e.target.select()} />
@@ -124,17 +127,17 @@ export function SetInputs({ exercise, logger, item, big, addLabel }: {
   if (uni) {
     return (
       <form className={big ? 'side-form big' : 'side-form'} onSubmit={(e) => { e.preventDefault(); void add(); }}>
-        <div className="side-row side-head">
+        <div className={fa ? 'side-row side-head' : 'side-row side-head single'}>
           <span />
-          <span>{fieldLabel(fa, exercise)}</span>
+          {fa && <span>{fieldLabel(fa, exercise)}</span>}
           <span>{fieldLabel(fb, exercise)}</span>
         </div>
-        <div className="side-row">
+        <div className={fa ? 'side-row' : 'side-row single'}>
           <span className="side-tag">{t.leftShort}</span>
           {inputs(a, setA, b, setB, false)}
         </div>
         {hold && <HoldTimer label={t.left} target={target} onDone={(s) => setB(String(s))} />}
-        <div className="side-row">
+        <div className={fa ? 'side-row' : 'side-row single'}>
           <span className="side-tag">{t.rightShort}</span>
           {inputs(aR, setAR, bR, setBR, false)}
         </div>

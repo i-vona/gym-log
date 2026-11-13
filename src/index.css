@@ -399,3 +399,4 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .sources ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
 .sources li { margin: 4px 0; }
 .sources a { color: var(--text); }
+.side-row.single { grid-template-columns: 34px 1fr; }

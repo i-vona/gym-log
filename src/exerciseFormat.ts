@@ -11,6 +11,13 @@ export const FIELDS: Record<ExerciseType, { fields: [Field, Field]; required: Fi
   carry: { fields: ['weight', 'meters'], required: ['meters'] },
 };
 
+/** Inputs for an exercise: body-weight exercises drop the kg field. Main field comes last. */
+export function fieldsFor(ex: Exercise): { fields: Field[]; required: Field[] } {
+  const f = FIELDS[ex.type];
+  const noLoad = ex.bodyweight && (ex.type === 'strength' || ex.type === 'hold');
+  return { fields: noLoad ? f.fields.filter((x) => x !== 'weight') : [...f.fields], required: f.required };
+}
+
 export function useExerciseFormat() {
   const { t, fmtNum } = useI18n();
 
