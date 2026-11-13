@@ -30,6 +30,7 @@ const CATEGORY: Record<string, RestCategory> = {
   lunge: 'compound',
   cableRow: 'moderate', kbSwing: 'moderate', tricepsPushdown: 'isolation',
   facePull: 'light', bandPullApart: 'light', bandLateralWalk: 'light',
+  frontSquat: 'compound', bulgarianSplitSquat: 'moderate', stepUp: 'moderate', sumoSquat: 'moderate', goodMorning: 'moderate', singleLegRdl: 'moderate', cableKickback: 'light', hipAbduction: 'light', wallSit: 'hold', inclineBench: 'compound', inclineDbPress: 'moderate', machineChestPress: 'moderate', arnoldPress: 'moderate', landminePress: 'moderate', frontRaise: 'light', cableLateralRaise: 'light', inclinePushUp: 'moderate', kneePushUp: 'moderate', skullCrusher: 'isolation', benchDip: 'isolation', tBarRow: 'compound', chestSupportedRow: 'moderate', invertedRow: 'moderate', straightArmPulldown: 'isolation', hammerCurl: 'isolation', cableCurl: 'isolation', preacherCurl: 'isolation', cableCrunch: 'core', lyingLegRaise: 'core', hangingLegRaise: 'core', mountainClimber: 'core', pallofPress: 'core', bicycleCrunch: 'core', birdDog: 'core', burpee: 'light', jumpingJacks: 'light',
   gobletSquat: 'moderate', pushUp: 'moderate', dbBench: 'moderate', dbRdl: 'moderate', bwSquat: 'light',
   assistedPullup: 'moderate', latPulldown: 'moderate', dbRow: 'moderate', dbOhp: 'moderate', gluteBridge: 'moderate',
   curl: 'isolation', triceps: 'isolation', chestFly: 'isolation', legCurl: 'isolation', legExtension: 'isolation',

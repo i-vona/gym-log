@@ -36,7 +36,7 @@ export function normalizeInput(raw: Partial<GenInput> & { equip?: unknown }): Ge
 type Pattern =
   | 'squat' | 'hinge' | 'lunge' | 'glute' | 'hamCurl' | 'quadIso' | 'calf'
   | 'pushH' | 'pushV' | 'pullV' | 'pullH' | 'fly' | 'lateral' | 'rearDelt' | 'biceps' | 'triceps'
-  | 'coreFlex' | 'coreAntiExt' | 'coreRot' | 'carry' | 'cardio';
+  | 'coreFlex' | 'coreAntiExt' | 'coreRot' | 'carry' | 'conditioning' | 'cardio';
 
 /** Movement pattern, minimum equipment and difficulty of each built-in exercise. */
 const META: Record<string, { p: Pattern; eq: Equip; lvl: Level }> = {
@@ -86,6 +86,42 @@ const META: Record<string, { p: Pattern; eq: Equip; lvl: Level }> = {
   bandLateralWalk: { p: 'glute', eq: 'band', lvl: 1 },
   kbSwing: { p: 'hinge', eq: 'kb', lvl: 2 },
   farmerCarry: { p: 'carry', eq: 'db', lvl: 1 },
+  frontSquat: { p: 'squat', eq: 'gym', lvl: 3 },
+  bulgarianSplitSquat: { p: 'lunge', eq: 'db', lvl: 2 },
+  stepUp: { p: 'lunge', eq: 'db', lvl: 1 },
+  sumoSquat: { p: 'squat', eq: 'db', lvl: 1 },
+  goodMorning: { p: 'hinge', eq: 'gym', lvl: 2 },
+  singleLegRdl: { p: 'hinge', eq: 'db', lvl: 2 },
+  cableKickback: { p: 'glute', eq: 'gym', lvl: 1 },
+  hipAbduction: { p: 'glute', eq: 'gym', lvl: 1 },
+  wallSit: { p: 'quadIso', eq: 'none', lvl: 1 },
+  inclineBench: { p: 'pushH', eq: 'gym', lvl: 2 },
+  inclineDbPress: { p: 'pushH', eq: 'db', lvl: 1 },
+  machineChestPress: { p: 'pushH', eq: 'gym', lvl: 1 },
+  arnoldPress: { p: 'pushV', eq: 'db', lvl: 2 },
+  landminePress: { p: 'pushV', eq: 'gym', lvl: 1 },
+  frontRaise: { p: 'lateral', eq: 'db', lvl: 1 },
+  cableLateralRaise: { p: 'lateral', eq: 'gym', lvl: 1 },
+  inclinePushUp: { p: 'pushH', eq: 'none', lvl: 1 },
+  kneePushUp: { p: 'pushH', eq: 'none', lvl: 1 },
+  skullCrusher: { p: 'triceps', eq: 'gym', lvl: 2 },
+  benchDip: { p: 'triceps', eq: 'none', lvl: 1 },
+  tBarRow: { p: 'pullH', eq: 'gym', lvl: 2 },
+  chestSupportedRow: { p: 'pullH', eq: 'db', lvl: 1 },
+  invertedRow: { p: 'pullH', eq: 'gym', lvl: 1 },
+  straightArmPulldown: { p: 'pullV', eq: 'gym', lvl: 1 },
+  hammerCurl: { p: 'biceps', eq: 'db', lvl: 1 },
+  cableCurl: { p: 'biceps', eq: 'gym', lvl: 1 },
+  preacherCurl: { p: 'biceps', eq: 'gym', lvl: 1 },
+  cableCrunch: { p: 'coreFlex', eq: 'gym', lvl: 1 },
+  lyingLegRaise: { p: 'coreFlex', eq: 'none', lvl: 1 },
+  hangingLegRaise: { p: 'coreFlex', eq: 'gym', lvl: 3 },
+  mountainClimber: { p: 'coreAntiExt', eq: 'none', lvl: 1 },
+  pallofPress: { p: 'coreRot', eq: 'gym', lvl: 1 },
+  bicycleCrunch: { p: 'coreRot', eq: 'none', lvl: 1 },
+  birdDog: { p: 'coreAntiExt', eq: 'none', lvl: 1 },
+  burpee: { p: 'conditioning', eq: 'none', lvl: 2 },
+  jumpingJacks: { p: 'conditioning', eq: 'none', lvl: 1 },
   treadmill: { p: 'cardio', eq: 'gym', lvl: 1 },
   cycling: { p: 'cardio', eq: 'gym', lvl: 1 },
   rowing: { p: 'cardio', eq: 'gym', lvl: 1 },
@@ -97,7 +133,7 @@ const META: Record<string, { p: Pattern; eq: Equip; lvl: Level }> = {
 
 /** Order of movement patterns per focus: big multi-joint lifts first, core last. */
 const TEMPLATES: Record<Exclude<Focus, 'cardio'>, Pattern[]> = {
-  full: ['squat', 'pushH', 'pullV', 'hinge', 'pushV', 'pullH', 'lunge', 'coreAntiExt', 'coreRot', 'glute', 'biceps', 'triceps'],
+  full: ['squat', 'pushH', 'pullV', 'hinge', 'pushV', 'pullH', 'lunge', 'coreAntiExt', 'coreRot', 'glute', 'conditioning', 'biceps', 'triceps'],
   upper: ['pushH', 'pullV', 'pushV', 'pullH', 'lateral', 'rearDelt', 'biceps', 'triceps', 'fly', 'coreAntiExt'],
   lower: ['squat', 'hinge', 'lunge', 'glute', 'hamCurl', 'quadIso', 'calf', 'coreRot'],
   back: ['pullV', 'pullH', 'hinge', 'rearDelt', 'biceps', 'carry', 'coreAntiExt'],

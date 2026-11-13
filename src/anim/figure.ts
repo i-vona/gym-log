@@ -41,6 +41,7 @@ export type Prop =
   | { k: 'grip'; at: Joint }
   | { k: 'band'; a: Joint; b: Joint }
   | { k: 'kb'; at: Joint }
+  | { k: 'rod'; from: V; to: Joint }
   | { k: 'seg'; at: Joint; a: number; len: number; w?: number }
   | { k: 'cable'; from: V; to: Joint }
   | { k: 'line'; a: V; b: V; w?: number }
@@ -357,6 +358,9 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
       case 'grip':
         out.push({ k: 'c', c: j[pr.at], r: 3.5, fill: true, w: 0, cl: 'prop' });
         break;
+      case 'rod':
+        line(pr.from, j[pr.to], 5, 'prop');
+        break;
       case 'band':
         line(j[pr.a], j[pr.b], 3, 'band');
         break;
@@ -391,7 +395,7 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
   };
 
   const props = m.props ?? [];
-  const isScenery = (pr: Prop) => pr.k === 'line' || pr.k === 'rect' || pr.k === 'circle' || pr.k === 'cable' || pr.k === 'water';
+  const isScenery = (pr: Prop) => pr.k === 'rod' || pr.k === 'line' || pr.k === 'rect' || pr.k === 'circle' || pr.k === 'cable' || pr.k === 'water';
   const isFar = (pr: Prop) => 'at' in pr && pr.at.endsWith('2');
 
   if (!m.noFloor) line([vx, GROUND], [vx + vw, GROUND], 2, 'scene');
