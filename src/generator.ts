@@ -1,5 +1,7 @@
 import type { Exercise, LText, Plan, PlanItem, PlanSection } from './db';
 import { recommendedRest, restCategory, type RestCategory } from './rest';
+import { MUSCLES } from './anim/muscles';
+import type { Muscle } from './anim/figure';
 
 // Builds a workout from a few answers: focus, time, goal, level, equipment.
 // Exercises are chosen per movement pattern (big lifts first, small muscles and core
@@ -151,6 +153,10 @@ export function itemSeconds(it: PlanItem, ex: Exercise | undefined, first: boole
 /** A generated workout, before it's saved as a plan. */
 export interface Draft {
   warmup: LText[];
+  /** Endurance goal: cardio before strength. Otherwise strength first. */
+  cardioFirst: boolean;
+  /** Why the workout looks the way it does (order, skipped muscles). */
+  notes: LText[];
   /** Minutes the warm-up takes (shorter for short workouts). */
   warmupMin: number;
   main: PlanItem[];
@@ -209,7 +215,58 @@ export function estimateSeconds(d: Draft, exByKey: Map<string, Exercise>): numbe
   return warm + cool + all.reduce((s, it, i) => s + itemSeconds(it, exByKey.get(it.ex!), i === 0), 0);
 }
 
-export function generate(input: GenInput, exByKey: Map<string, Exercise>, seed: number): Draft {
+// ---------------------------------------------------------------------------
+// Recovery: ACSM recommends at least 48 h before training the same muscle group again.
+// Trainers commonly allow ~24 h for small, endurance-type muscles (core, calves, forearms).
+
+/** Hours since each muscle was last trained as a main (primary) muscle. */
+export type Recent = Partial<Record<Muscle, number>>;
+
+const QUICK: Muscle[] = ['abs', 'obliques', 'calves', 'forearms', 'hipFlexors'];
+export const recoveryHours = (m: Muscle) => (QUICK.includes(m) ? 24 : 48);
+
+/** Muscles still recovering, with hours since training and hours left. */
+export function recovering(recent: Recent): { muscle: Muscle; ago: number; left: number }[] {
+  return (Object.entries(recent) as [Muscle, number][])
+    .filter(([m, ago]) => m !== 'cardio' && ago < recoveryHours(m))
+    .map(([muscle, ago]) => ({ muscle, ago, left: Math.ceil(recoveryHours(muscle) - ago) }))
+    .sort((a, b) => a.ago - b.ago);
+}
+
+export const AREA_MUSCLES: Record<Exclude<Focus, 'cardio'>, Muscle[]> = {
+  full: ['chest', 'shoulders', 'rearDelts', 'triceps', 'biceps', 'lats', 'upperBack', 'lowerBack', 'abs', 'obliques', 'glutes', 'quads', 'hamstrings', 'calves'],
+  upper: ['chest', 'shoulders', 'rearDelts', 'triceps', 'biceps', 'lats', 'upperBack', 'forearms'],
+  lower: ['quads', 'hamstrings', 'glutes', 'calves', 'hipFlexors'],
+  back: ['lats', 'upperBack', 'rearDelts', 'biceps', 'lowerBack'],
+  push: ['chest', 'shoulders', 'triceps'],
+  arms: ['biceps', 'triceps', 'forearms'],
+  core: ['abs', 'obliques', 'lowerBack'],
+};
+
+/** Chosen areas whose main muscles are still recovering. */
+export function conflicts(focus: Focus[], recent: Recent): Exclude<Focus, 'cardio'>[] {
+  const rec = new Set(recovering(recent).map((r) => r.muscle));
+  return focus.filter((f): f is Exclude<Focus, 'cardio'> => f !== 'full' && f !== 'cardio' && AREA_MUSCLES[f].some((m) => rec.has(m)));
+}
+
+/**
+ * Suggests today's focus: a fully recovered area trained longest ago (training each
+ * muscle about twice a week builds more muscle than once a week).
+ */
+export function suggestFocus(recent: Recent): Exclude<Focus, 'cardio'> | null {
+  const rec = new Set(recovering(recent).map((r) => r.muscle));
+  if (!rec.size) return 'full';
+  const areas: Exclude<Focus, 'cardio' | 'full' | 'arms'>[] = ['lower', 'push', 'back', 'upper', 'core'];
+  const ready = areas.filter((a) => AREA_MUSCLES[a].every((m) => !rec.has(m)));
+  const since = (a: Exclude<Focus, 'cardio'>) => Math.min(...AREA_MUSCLES[a].map((m) => recent[m] ?? 999));
+  return ready.sort((a, b) => since(b) - since(a))[0] ?? null;
+}
+
+// Running interferes with strength and muscle gains more than cycling (Wilson et al. 2012),
+// so cardio after strength work (or with tired legs) is low-impact.
+const LOW_INTERFERENCE = ['cycling', 'elliptical', 'walking', 'rowing'];
+
+export function generate(input: GenInput, exByKey: Map<string, Exercise>, seed: number, recent: Recent = {}): Draft {
   const rand = rng(seed);
   const budget = input.minutes * 60;
   const strengthFocus = input.focus.filter((f): f is Exclude<Focus, 'cardio'> => f !== 'cardio');
@@ -226,18 +283,42 @@ export function generate(input: GenInput, exByKey: Map<string, Exercise>, seed: 
     warmup: short ? [T('3 min easy cardio', '3 min laganog kardija'), ...warmup.slice(1, 2)] : warmup,
     warmupMin: short ? 4 : 7,
     main: [], cardio: [], cooldown: input.minutes >= 30 ? COOLDOWN : [],
+    cardioFirst: input.goal === 'endurance',
+    notes: [],
   };
 
-  const pickCardio = () => {
-    const c = candidates('cardio', input, exByKey);
+  // Muscles to leave out: still recovering and not part of an area chosen on purpose.
+  const chosen = new Set(strengthFocus.filter((f) => f !== 'full').flatMap((f) => AREA_MUSCLES[f]));
+  const avoid = new Set(recovering(recent).map((r) => r.muscle).filter((m) => !chosen.has(m)));
+  let skipped = false;
+  const ok = (e: Exercise) => {
+    const bad = (MUSCLES[e.key!]?.p ?? []).some((m) => avoid.has(m));
+    if (bad) skipped = true;
+    return !bad;
+  };
+  const recoveryNote = () => {
+    if (skipped) draft.notes.unshift(T(
+      'Muscles trained in the last 48 h were left out so they can recover.',
+      'Mišići trenirani u zadnjih 48 h su izostavljeni kako bi se oporavili.',
+    ));
+  };
+
+  const pickCardio = (afterStrength: boolean) => {
+    const all = candidates('cardio', input, exByKey);
+    const legsTired = (['quads', 'hamstrings', 'glutes', 'calves'] as Muscle[]).some((m) => avoid.has(m));
+    // Tired legs: only easy, low-impact options (walking, elliptical).
+    const gentle = all.filter((e) => (legsTired ? ['walking', 'elliptical'] : LOW_INTERFERENCE).includes(e.key!));
+    if (legsTired) skipped = true;
+    const c = (afterStrength || legsTired) && gentle.length ? gentle : all;
     return c[Math.floor(rand() * c.length)];
   };
 
   // Cardio only: one steady block filling the time.
   if (!strengthFocus.length) {
-    const ex = pickCardio();
+    const ex = pickCardio(false);
     const mins = Math.max(10, Math.round((budget - estimateSeconds(draft, exByKey)) / 60));
     if (ex) draft.cardio.push({ ex: ex.key, target: String(mins), unit: 'min' });
+    recoveryNote();
     return draft;
   }
 
@@ -260,7 +341,7 @@ export function generate(input: GenInput, exByKey: Map<string, Exercise>, seed: 
   const used = new Set<string>();
   for (const p of order) {
     const limit = CORE.includes(p) ? strengthBudget : strengthBudget - coreReserve;
-    const options = candidates(p, input, exByKey).filter((e) => !used.has(e.key!));
+    const options = candidates(p, input, exByKey).filter((e) => !used.has(e.key!) && ok(e));
     if (!options.length) continue;
     // With equipment available, mostly pick exercises that use it (any kind equally:
     // barbell, machine, cable, dumbbell, kettlebell, band); body-weight ones now and then.
@@ -286,9 +367,16 @@ export function generate(input: GenInput, exByKey: Map<string, Exercise>, seed: 
   }
 
   if (wantsCardio) {
-    const ex = pickCardio();
+    const ex = pickCardio(!draft.cardioFirst);
+    recoveryNote();
     if (ex) draft.cardio.push({ ex: ex.key, target: String(cardioMin), unit: 'min' });
+    draft.notes.push(draft.cardioFirst
+      ? T('Cardio comes first because your goal is endurance: do first what matters most for your goal.',
+        'Kardio je prvi jer ti je cilj izdržljivost: prvo radi ono što je najvažnije za tvoj cilj.')
+      : T('Strength first, cardio after: research shows strength improves more this way, and cardio does not suffer. Low-impact cardio (bike, elliptical, walking) interferes least with strength gains.',
+        'Prvo snaga, zatim kardio: istraživanja pokazuju da snaga tako više napreduje, a kardio ne trpi. Kardio bez udaraca (bicikl, eliptični, hodanje) najmanje ometa napredak u snazi.'));
   }
+  if (!wantsCardio) recoveryNote();
   return draft;
 }
 
@@ -300,8 +388,9 @@ export function toPlan(d: Draft, input: GenInput): Plan {
   };
   const sections: PlanSection[] = [];
   if (d.warmup.length) sections.push({ title: T('Warm-up', 'Zagrijavanje'), items: d.warmup.map((text) => ({ text })) });
-  if (d.main.length) sections.push({ title: T('Main part', 'Glavni dio'), items: d.main });
-  if (d.cardio.length) sections.push({ title: T('Cardio', 'Kardio'), items: d.cardio });
+  const main: PlanSection = { title: T('Main part', 'Glavni dio'), items: d.main };
+  const cardio: PlanSection = { title: T('Cardio', 'Kardio'), items: d.cardio };
+  for (const sec of d.cardioFirst ? [cardio, main] : [main, cardio]) if (sec.items.length) sections.push(sec);
   if (d.cooldown.length) sections.push({ title: T('Cool-down', 'Kraj'), items: d.cooldown.map((text) => ({ text })) });
   return {
     key: `gen-${Date.now()}`,
@@ -309,6 +398,7 @@ export function toPlan(d: Draft, input: GenInput): Plan {
     name,
     sections,
     notes: [
+      ...d.notes,
       T('Finish each set with 1–2 reps in reserve.', 'Na kraju serije neka ostanu 1–2 ponavljanja u rezervi.'),
       T('When every set reaches the top of the range, add weight next time.', 'Kad sve serije dođu do gornje granice, sljedeći put dodaj težinu.'),
     ],

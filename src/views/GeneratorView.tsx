@@ -4,9 +4,11 @@ import { db, type Exercise, type PlanItem } from '../db';
 import { useI18n } from '../i18n';
 import { useExerciseFormat } from '../exerciseFormat';
 import {
-  candidates, DEFAULT_INPUT, estimateSeconds, FOCUS_NAMES, generate, normalizeInput, patternOf, prescribe, toPlan,
-  type Draft, type Equip, type Focus, type GenInput, type Goal, type Level, type Sex,
+  candidates, conflicts, DEFAULT_INPUT, estimateSeconds, FOCUS_NAMES, generate, normalizeInput, patternOf, prescribe,
+  recovering, suggestFocus, toPlan,
+  type Draft, type Equip, type Focus, type GenInput, type Goal, type Level, type Recent, type Sex,
 } from '../generator';
+import { MUSCLES } from '../anim/muscles';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { ExerciseInfo } from '../components/ExerciseInfo';
 
@@ -15,13 +17,32 @@ const MINUTES = [20, 30, 45, 60, 75, 90];
 
 /** "Build me a workout": a few questions, then a preview where exercises can be swapped. */
 export function GeneratorView({ date, onClose, onSaved }: { date: string; onClose: () => void; onSaved: () => void }) {
-  const { t, lt, exName } = useI18n();
+  const { t, lt, exName, lang, muscleName } = useI18n();
   const { target } = useExerciseFormat();
   const exercises = useLiveQuery(() => db.exercises.toArray());
   const exByKey = useMemo(() => new Map(exercises?.filter((e) => e.key).map((e) => [e.key!, e])), [exercises]);
   const exById = useMemo(() => new Map(exercises?.map((e) => [e.id!, e])), [exercises]);
 
   const [input, setInput] = useState<GenInput>(DEFAULT_INPUT);
+
+  // Hours since each muscle was last trained as a main muscle (last 4 days).
+  const recent = useLiveQuery(async () => {
+    const since = new Date(Date.now() - 4 * 86400e3).toISOString().slice(0, 10);
+    const [es, exs] = await Promise.all([db.entries.where('date').aboveOrEqual(since).toArray(), db.exercises.toArray()]);
+    const keyOf = new Map(exs.map((e) => [e.id!, e.key]));
+    const r: Recent = {};
+    for (const e of es) {
+      const key = keyOf.get(e.exerciseId);
+      const hours = (Date.now() - e.createdAt) / 3.6e6;
+      for (const m of (key && MUSCLES[key]?.p) || []) r[m] = Math.min(r[m] ?? Infinity, hours);
+    }
+    return r;
+  }, []) ?? {};
+  const rec = recovering(recent);
+  const suggestion = suggestFocus(recent);
+  const clash = conflicts(input.focus, recent);
+  const ago = (h: number) => (lang === 'hr' ? `prije ${Math.round(h)} h` : `${Math.round(h)} h ago`);
+  const left = (h: number) => (lang === 'hr' ? `još ${h} h` : `${h} h left`);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [keep, setKeep] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -37,7 +58,7 @@ export function GeneratorView({ date, onClose, onSaved }: { date: string; onClos
 
   const build = () => {
     void db.meta.put({ key: 'genInput', value: input });
-    setDraft(generate(input, exByKey, Date.now()));
+    setDraft(generate(input, exByKey, Date.now(), recent));
   };
 
   const exFor = (it: PlanItem) => (it.ex ? exByKey.get(it.ex) : undefined);
@@ -115,12 +136,31 @@ export function GeneratorView({ date, onClose, onSaved }: { date: string; onClos
         {!draft ? (
           <>
             <section className="card">
+              <h2>{t.recoveryTitle}</h2>
+              {rec.length ? (
+                <ul className="recovery">
+                  {rec.map((r) => (
+                    <li key={r.muscle}><span className="chip chip-m1">{muscleName(r.muscle)}</span><span className="muted">{ago(r.ago)} · {left(r.left)}</span></li>
+                  ))}
+                </ul>
+              ) : <p className="hint">{t.allRecovered}</p>}
+              <p className="hint">{t.recoveryHint}</p>
+              {suggestion && (
+                <button className="suggest" onClick={() => set('focus', [suggestion, ...input.focus.filter((f) => f === 'cardio')])}>
+                  <span>{t.suggestToday}</span><strong>{lt(FOCUS_NAMES[suggestion])}</strong>
+                </button>
+              )}
+            </section>
+            <section className="card">
               <h2>{t.genFocus}</h2>
               <div className="chips">
                 {FOCUSES.map((f) => (
                   <button key={f} className={input.focus.includes(f) ? 'chip-btn on' : 'chip-btn'} onClick={() => toggleFocus(f)}>{lt(FOCUS_NAMES[f])}</button>
                 ))}
               </div>
+              {clash.length > 0 && (
+                <p className="warn">⚠ {clash.map((f) => lt(FOCUS_NAMES[f])).join(', ')}: {t.conflictWarn}</p>
+              )}
             </section>
             <section className="card">
               <h2>{t.genTime}</h2>
@@ -153,6 +193,7 @@ export function GeneratorView({ date, onClose, onSaved }: { date: string; onClos
             <section className="card">
               <h2>{lt(toPlan(draft, input).name)}</h2>
               <p className="hint">≈ {minutes} min · {t.genPreviewHint}</p>
+              {draft.notes.length > 0 && <ul className="advice">{draft.notes.map((n, i) => <li key={i}>{lt(n)}</li>)}</ul>}
             </section>
             {draft.warmup.length > 0 && (
               <section>

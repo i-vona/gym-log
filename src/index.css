@@ -413,3 +413,10 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .small-btn { padding: 8px 10px; font-size: 13px; }
 .gen-text { margin: 0; padding-left: 18px; color: var(--muted); }
 .gen-text li { margin: 3px 0; }
+
+.recovery { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.recovery li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+.suggest { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--text); margin-top: 6px; }
+.suggest span { font-size: 13px; color: var(--muted); }
+.suggest strong { color: var(--accent); }
+.warn { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgb(234 179 8 / 0.15); font-size: 14px; }
