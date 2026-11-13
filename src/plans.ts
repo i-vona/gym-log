@@ -3,6 +3,7 @@ import type { Plan } from './db';
 export const SEED_PLANS: Plan[] = [
   {
     key: 'core-upper-1',
+    v: 2,
     name: { en: 'Core + upper body', hr: 'Core + gornji dio tijela' },
     sections: [
       {
@@ -45,6 +46,7 @@ export const SEED_PLANS: Plan[] = [
           en: '2-3 rounds, no rest between exercises, 60 s rest between rounds',
           hr: '2-3 kruga, bez pauze između vježbi, 60 s odmora između krugova',
         },
+        circuit: { rounds: 3, rest: 60 },
         items: [
           { ex: 'plank', target: '45', unit: 's' },
           { ex: 'deadBug', target: '10', perSide: true },

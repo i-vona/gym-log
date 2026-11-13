@@ -59,11 +59,15 @@ export interface PlanSection {
   title: LText;
   note?: LText;
   items: PlanItem[];
+  /** Do the items one after another, then rest, for this many rounds. */
+  circuit?: { rounds: number; rest: number };
 }
 
 export interface Plan {
   id?: number;
   key?: string;
+  /** Version of a built-in plan; a higher version in code replaces the stored copy. */
+  v?: number;
   name: LText;
   sections: PlanSection[];
   notes?: LText[];
@@ -153,6 +157,10 @@ export async function ensureSeed() {
     if (missing.length) await db.exercises.bulkAdd(missing.map((e) => ({ ...e })));
 
     const seeded = ((await db.meta.get('seededPlans'))?.value as string[] | undefined) ?? [];
+    for (const p of SEED_PLANS) {
+      const stored = await db.plans.where('key').equals(p.key!).first();
+      if (stored && (stored.v ?? 0) < (p.v ?? 0)) await db.plans.put({ ...structuredClone(p), id: stored.id });
+    }
     const newPlans = SEED_PLANS.filter((p) => !seeded.includes(p.key!));
     if (newPlans.length) {
       await db.plans.bulkAdd(newPlans.map((p) => structuredClone(p)));

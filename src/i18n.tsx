@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Exercise, LText } from './db';
+import type { Muscle } from './anim/figure';
 
 export type Lang = 'en' | 'hr';
 
@@ -101,6 +102,23 @@ const en = {
   defaultRest: 'Rest timer',
   defaultRestHint: 'Starts after each set. Plans use their own rest times; this is for other exercises.',
   off: 'Off',
+  startWorkout: 'Start workout',
+  continueWorkout: 'Continue workout',
+  setWord: 'Set',
+  ofWord: 'of',
+  round: 'Round',
+  logSet: 'Log set',
+  next: 'Next',
+  prev: 'Back',
+  nextUp: 'Next up',
+  allSetsDone: 'All sets done',
+  workoutDone: 'Workout complete!',
+  finish: 'Finish',
+  duration: 'Duration',
+  checklistNext: 'Done, next',
+  primaryMuscles: 'Main muscles',
+  secondaryMuscles: 'Also works',
+  step: 'Step',
 };
 
 type Dict = typeof en;
@@ -203,6 +221,43 @@ const hr: Dict = {
   defaultRest: 'Tajmer za pauzu',
   defaultRestHint: 'Pokreće se nakon svake serije. Planovi imaju svoje pauze; ovo vrijedi za ostale vježbe.',
   off: 'Isklj.',
+  startWorkout: 'Započni trening',
+  continueWorkout: 'Nastavi trening',
+  setWord: 'Serija',
+  ofWord: 'od',
+  round: 'Krug',
+  logSet: 'Spremi seriju',
+  next: 'Sljedeća',
+  prev: 'Natrag',
+  nextUp: 'Sljedeće',
+  allSetsDone: 'Sve serije gotove',
+  workoutDone: 'Trening gotov!',
+  finish: 'Završi',
+  duration: 'Trajanje',
+  checklistNext: 'Gotovo, dalje',
+  primaryMuscles: 'Glavni mišići',
+  secondaryMuscles: 'Pomoćni mišići',
+  step: 'Korak',
+};
+
+const muscleNames: Record<Muscle, [en: string, hr: string]> = {
+  chest: ['Chest', 'Prsa'],
+  shoulders: ['Shoulders', 'Ramena'],
+  rearDelts: ['Rear shoulders', 'Stražnja ramena'],
+  triceps: ['Triceps', 'Triceps'],
+  biceps: ['Biceps', 'Biceps'],
+  forearms: ['Forearms', 'Podlaktice'],
+  lats: ['Lats', 'Široki leđni'],
+  upperBack: ['Upper back', 'Gornja leđa'],
+  lowerBack: ['Lower back', 'Donja leđa'],
+  abs: ['Abs', 'Trbušnjaci'],
+  obliques: ['Obliques', 'Kosi trbušni'],
+  glutes: ['Glutes', 'Gluteusi'],
+  quads: ['Quads', 'Kvadricepsi'],
+  hamstrings: ['Hamstrings', 'Stražnja loža'],
+  hipFlexors: ['Hip flexors', 'Pregibači kuka'],
+  calves: ['Calves', 'Listovi'],
+  cardio: ['Heart & lungs', 'Srce i pluća'],
 };
 
 const exerciseNames: Record<string, [en: string, hr: string]> = {
@@ -256,6 +311,7 @@ interface I18n {
   setLang: (l: Lang) => void;
   t: Dict;
   exName: (e: Exercise | undefined) => string;
+  muscleName: (m: Muscle) => string;
   /** English name (for video searches). */
   enName: (e: Exercise) => string;
   /** Picks the current language from a built-in two-language text. */
@@ -292,6 +348,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       if (e.key && exerciseNames[e.key]) return exerciseNames[e.key][lang === 'hr' ? 1 : 0];
       return e.name ?? '?';
     },
+    muscleName: (m) => muscleNames[m][lang === 'hr' ? 1 : 0],
     enName: (e) => (e.key && exerciseNames[e.key] ? exerciseNames[e.key][0] : e.name ?? ''),
     lt: (s) => (s == null ? '' : typeof s === 'string' ? s : s[lang]),
     fmtDate: (iso, opts = { weekday: 'short', day: 'numeric', month: 'short' }) =>

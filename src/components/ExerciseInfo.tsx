@@ -1,13 +1,14 @@
 import type { Exercise } from '../db';
 import { useI18n } from '../i18n';
 import { MOVES } from '../anim/moves';
-import { ExerciseAnim } from './ExerciseAnim';
+import { MUSCLES } from '../anim/muscles';
+import { ExerciseAnim, MuscleChips } from './ExerciseAnim';
 
-/** Sheet with the animation and a link to search for a video of the exercise. */
+/** Sheet with the animation, worked muscles and a link to search for a video. */
 export function ExerciseInfo({ exercise, onClose }: { exercise: Exercise; onClose: () => void }) {
-  const { t, exName, enName } = useI18n();
+  const { t, exName } = useI18n();
   const move = exercise.key ? MOVES[exercise.key] : undefined;
-  const query = encodeURIComponent(`${enName(exercise)} exercise proper form`);
+  const targets = exercise.key ? MUSCLES[exercise.key] : undefined;
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -16,12 +17,20 @@ export function ExerciseInfo({ exercise, onClose }: { exercise: Exercise; onClos
           <h2>{exName(exercise)}</h2>
           <button className="icon-btn small" aria-label={t.close} onClick={onClose}>×</button>
         </header>
-        {move ? <ExerciseAnim move={move} label={t.howTo} /> : <p className="hint">{t.noAnim}</p>}
-        {move && <p className="hint center-text">{t.animHint}</p>}
-        <a className="ghost wide link-as-btn" href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noreferrer">
-          ▶ {t.watchVideo}
-        </a>
+        {move ? <ExerciseAnim move={move} targets={targets} label={t.howTo} /> : <p className="hint">{t.noAnim}</p>}
+        <MuscleChips targets={targets} />
+        <VideoLink exercise={exercise} />
       </div>
     </div>
+  );
+}
+
+export function VideoLink({ exercise }: { exercise: Exercise }) {
+  const { t, enName } = useI18n();
+  const query = encodeURIComponent(`${enName(exercise)} exercise proper form`);
+  return (
+    <a className="ghost wide link-as-btn" href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noreferrer">
+      ▶ {t.watchVideo}
+    </a>
   );
 }

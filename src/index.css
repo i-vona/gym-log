@@ -9,6 +9,11 @@
   --accent-text: #ffffff;
   --accent-soft: rgba(234, 88, 12, 0.12);
   --danger: #dc2626;
+  --body: #c5ccd6;
+  --body-far: #a3acb9;
+  --m1: #d9363e;
+  --m2: #f2a3a0;
+  --equip: #3f3f46;
   --radius: 14px;
   color-scheme: light dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -26,6 +31,11 @@
     --accent: #fb923c;
     --accent-text: #1c1917;
     --accent-soft: rgba(251, 146, 60, 0.16);
+    --body: #6b7686;
+    --body-far: #4a5361;
+    --m1: #f0525a;
+    --m2: #a3484c;
+    --equip: #d6d3d1;
   }
 }
 
@@ -236,9 +246,16 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .anim { position: relative; display: block; width: 100%; background: var(--surface-2); border-radius: 12px; padding: 8px; }
 .anim svg { display: block; width: 100%; max-height: 46dvh; }
 .anim-play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 40px; color: var(--accent); }
-.a-fig { stroke: var(--text); fill: var(--text); stroke-linecap: round; }
-.a-far { stroke: var(--muted); fill: var(--muted); stroke-linecap: round; opacity: 0.7; }
-.a-prop { stroke: var(--accent); fill: var(--accent); stroke-linecap: round; }
+.a-body { fill: var(--body); }
+.a-bodyFar { fill: var(--body-far); }
+.a-edge { stroke: var(--surface-2); stroke-width: 1.2; stroke-linejoin: round; }
+.a-m1 { fill: var(--m1); }
+.a-m2 { fill: var(--m2); }
+.a-dim { opacity: 0.6; }
+.a-heart { fill: var(--m1); transform-box: fill-box; transform-origin: center; animation: beat 0.9s ease-in-out infinite; }
+@keyframes beat { 50% { transform: scale(1.25); } }
+@media (prefers-reduced-motion: reduce) { .a-heart { animation: none; } }
+.a-prop { stroke: var(--equip); fill: var(--equip); stroke-linecap: round; }
 .a-scene { stroke: var(--muted); fill: var(--muted); stroke-linecap: round; opacity: 0.4; }
 .a-water { stroke: #3b82f6; }
 .a-ring { fill: none; }
@@ -277,3 +294,64 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .hold-run strong { font-size: 30px; font-variant-numeric: tabular-nums; }
 .hold-run.ready { background: var(--surface-2); color: var(--text); }
 .hold-run.reached { background: var(--accent); color: var(--accent-text); }
+
+/* Muscle legend */
+.muscles { display: flex; flex-direction: column; gap: 6px; }
+.muscles > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.muscles-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--surface-2); }
+.chip::before { content: ''; width: 9px; height: 9px; border-radius: 999px; }
+.chip-m1::before { background: var(--m1); }
+.chip-m2::before { background: var(--m2); }
+
+/* Follow-along screen */
+.start-btn { font-size: 17px; }
+.focus {
+  position: fixed; inset: 0; z-index: 20;
+  display: flex; flex-direction: column;
+  background: var(--bg);
+  padding-top: env(safe-area-inset-top);
+}
+.focus-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px 8px; }
+.focus-title { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; }
+.focus-title span { font-size: 12px; color: var(--muted); font-weight: 600; }
+.focus-title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ghost-space { visibility: hidden; }
+.focus-progress { height: 4px; background: var(--surface-2); margin: 0 16px; border-radius: 999px; overflow: hidden; }
+.focus-progress div { height: 100%; background: var(--accent); transition: width 0.3s; }
+.focus-body { flex: 1; overflow-y: auto; padding: 14px 16px 24px; max-width: 560px; width: 100%; margin: 0 auto; }
+.focus-foot {
+  display: flex; gap: 10px; padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.focus-foot button { flex: 1; padding: 14px; }
+.focus-ex, .focus-check, .focus-done { display: flex; flex-direction: column; gap: 12px; }
+.anim-big svg { max-height: 38dvh; }
+.focus-name h2 { margin: 2px 0 0; font-size: 26px; letter-spacing: -0.02em; line-height: 1.15; }
+.focus-name .target { font-size: 18px; margin-top: 4px; }
+.badge { display: inline-block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: var(--accent-soft); padding: 3px 8px; border-radius: 6px; }
+.set-dots { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.set-dots span:not(.set-dots-label) { width: 16px; height: 16px; border-radius: 999px; border: 2px solid var(--border); }
+.set-dots span.on { background: var(--accent); border-color: var(--accent); }
+.set-dots span.cur { border-color: var(--accent); }
+.set-dots-label { font-weight: 700; margin-left: 4px; }
+.add-row.big input { font-size: 26px; padding: 12px; text-align: center; }
+.add-row.big button { padding: 16px 14px; font-size: 16px; }
+.add-row.big { flex-wrap: wrap; }
+.add-row.big label { flex: 1 1 40%; }
+.add-row.big button { flex: 1 1 100%; }
+.check.big { padding: 16px; font-size: 17px; }
+.focus-rest {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: var(--text); color: var(--bg); border-radius: 18px; padding: 20px 16px; margin-bottom: 14px;
+}
+.focus-rest-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }
+.focus-rest strong { font-size: 72px; line-height: 1; font-variant-numeric: tabular-nums; }
+.focus-rest-bar { width: 100%; height: 6px; background: rgb(127 127 127 / 0.35); border-radius: 999px; overflow: hidden; }
+.focus-rest-bar div { height: 100%; background: var(--accent); transition: width 0.25s linear; }
+.focus-rest .row-actions { width: 100%; }
+.focus-rest .ghost { background: rgb(127 127 127 / 0.3); color: inherit; }
+.focus-next { margin: 0; font-size: 15px; opacity: 0.9; }
+.focus-done { align-items: center; text-align: center; padding-top: 40px; }
+.focus-done-icon { width: 84px; height: 84px; border-radius: 999px; display: grid; place-items: center; font-size: 44px; background: var(--accent); color: var(--accent-text); }
+.focus-done h2 { margin: 0; font-size: 26px; }

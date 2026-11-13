@@ -14,7 +14,8 @@ export type Joint =
 export type IK = [number, number, number];
 
 export interface Pose {
-  view?: 'side' | 'front';
+  /** side profile, facing the viewer, or seen from behind (to show back muscles) */
+  view?: 'side' | 'front' | 'back';
   /** torso angle (hip → shoulders) and length scale */
   t: number;
   tl?: number;
@@ -57,10 +58,11 @@ export interface Move {
   vb?: [number, number, number, number];
 }
 
-export type Cls = 'fig' | 'far' | 'prop' | 'scene' | 'water';
+export type Cls = 'body' | 'bodyFar' | 'm1' | 'm2' | 'heart' | 'prop' | 'scene' | 'water';
 export type Prim =
   | { k: 'l'; a: V; b: V; w: number; c: Cls }
-  | { k: 'c'; c: V; r: number; fill: boolean; w: number; cl: Cls }
+  | { k: 'c'; c: V; r: number; fill: boolean; w: number; cl: Cls; dim?: boolean }
+  | { k: 'p'; pts: V[]; cl: Cls; edge?: boolean; dim?: boolean }
   | { k: 'r'; x: number; y: number; w: number; h: number; cl: Cls };
 
 export const VIEW = { w: 200, h: 190 };
@@ -88,7 +90,7 @@ function solveIK(s: V, target: V, a: number, b: number, bend: number): [V, V] {
 
 /** Joint positions for a pose (before anchoring the hip is at 0,0). */
 export function joints(p: Pose): Record<Joint, V> {
-  const front = p.view === 'front';
+  const front = p.view === 'front' || p.view === 'back';
   const mir = (a: number) => (front ? 180 - a : a);
   const al = p.al ?? 1;
   const ll = p.ll ?? 1;
@@ -149,7 +151,7 @@ const ANGLE_KEYS = new Set<keyof Pose>(['t', 'h', 'ua', 'fa', 'ua2', 'fa2', 'th'
 
 /** Fills in defaults so two poses always have the same fields to blend. */
 function normalize(p: Pose): Pose {
-  const front = p.view === 'front';
+  const front = p.view === 'front' || p.view === 'back';
   const mir = (a: number) => (front ? 180 - a : a);
   const ua = p.ua ?? -90, fa = p.fa ?? -90, th = p.th ?? -90, sh = p.sh ?? -90;
   return {
@@ -197,11 +199,128 @@ export function poseAt(m: Move, ms: number): Pose {
   return lerpPose(m.frames[from], m.frames[to], m.loop ? u : e);
 }
 
-export function draw(m: Move, p: Pose): Prim[] {
+// ---------------------------------------------------------------------------
+// Drawing: a body with volume (tapered limbs, shaped torso) plus muscle highlights.
+
+export type Muscle =
+  | 'chest' | 'shoulders' | 'rearDelts' | 'triceps' | 'biceps' | 'forearms'
+  | 'lats' | 'upperBack' | 'lowerBack' | 'abs' | 'obliques'
+  | 'glutes' | 'quads' | 'hamstrings' | 'hipFlexors' | 'calves' | 'cardio';
+
+/** Primary (p) and secondary (s) muscles an exercise works. */
+export interface Targets { p: Muscle[]; s: Muscle[] }
+
+type Belly = [from: number, to: number, side: number, offset: number, width: number];
+
+// Where each muscle sits on a body segment: fraction along the segment, which side
+// (+1 front, -1 back, 0 middle), how far from the centre line, and half-width.
+const TORSO: Partial<Record<Muscle, Belly>> = {
+  chest: [0.56, 0.93, 1, 5, 5],
+  abs: [0.1, 0.55, 1, 5, 4.5],
+  obliques: [0.12, 0.55, 0, 0, 4],
+  lats: [0.4, 0.85, -1, 4.5, 5],
+  upperBack: [0.72, 1.0, -1, 4.5, 5],
+  lowerBack: [0.04, 0.4, -1, 5, 4],
+  glutes: [-0.1, 0.18, -1, 5.5, 7],
+};
+const UPPER_ARM: Partial<Record<Muscle, Belly>> = {
+  biceps: [0.25, 0.85, 1, 2, 3.2],
+  triceps: [0.25, 0.85, -1, 2, 3.4],
+  shoulders: [-0.05, 0.32, 0, 0, 6.2],
+  rearDelts: [-0.05, 0.32, -1, 1.5, 5.6],
+};
+const FOREARM: Partial<Record<Muscle, Belly>> = { forearms: [0.05, 0.65, 0, 0, 3.4] };
+const THIGH: Partial<Record<Muscle, Belly>> = {
+  quads: [0.15, 0.88, 1, 2.6, 5],
+  hamstrings: [0.15, 0.85, -1, 2.6, 4.6],
+  hipFlexors: [0, 0.3, 1, 3, 3.6],
+};
+const SHIN: Partial<Record<Muscle, Belly>> = { calves: [0.08, 0.6, -1, 2, 4] };
+
+function capsule(a: V, b: V, r1: number, r2: number): V[] {
+  const base = Math.atan2(b[1] - a[1], b[0] - a[0]);
+  const pts: V[] = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = base - Math.PI / 2 + (Math.PI * i) / 8;
+    pts.push([b[0] + Math.cos(t) * r2, b[1] + Math.sin(t) * r2]);
+  }
+  for (let i = 0; i <= 8; i++) {
+    const t = base + Math.PI / 2 + (Math.PI * i) / 8;
+    pts.push([a[0] + Math.cos(t) * r1, a[1] + Math.sin(t) * r1]);
+  }
+  return pts;
+}
+
+function ellipse(c: V, angle: number, rx: number, ry: number): V[] {
+  const pts: V[] = [];
+  for (let i = 0; i < 16; i++) {
+    const t = (i / 16) * Math.PI * 2;
+    const x = Math.cos(t) * rx;
+    const y = Math.sin(t) * ry;
+    pts.push([c[0] + x * Math.cos(angle) - y * Math.sin(angle), c[1] + x * Math.sin(angle) + y * Math.cos(angle)]);
+  }
+  return pts;
+}
+
+/** Unit vector along a→b and the normal pointing to the segment's front (anterior) side. */
+function frame(a: V, b: V, limb: boolean) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const d: V = [dx / len, dy / len];
+  // Limbs hang down with their front facing forward; the torso points up.
+  const n: V = limb ? [d[1], -d[0]] : [-d[1], d[0]];
+  return { d, n, len, angle: Math.atan2(dy, dx) };
+}
+
+export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
   const j = anchored(p);
   const out: Prim[] = [];
+  const front = p.view === 'front' || p.view === 'back';
+  const [vx, , vw] = m.vb ?? [0, 0, VIEW.w, VIEW.h];
   const line = (a: V, b: V, w: number, c: Cls) => out.push({ k: 'l', a, b, w, c });
-  const front = p.view === 'front';
+  const poly = (pts: V[], cl: Cls, edge = false, dim = false) => out.push({ k: 'p', pts, cl, edge, dim });
+  const level = (mu: Muscle): Cls | null => (tg?.p.includes(mu) ? 'm1' : tg?.s.includes(mu) ? 'm2' : null);
+
+  /** Muscle bellies on one segment. */
+  const muscles = (a: V, b: V, table: Partial<Record<Muscle, Belly>>, limb: boolean, dim: boolean) => {
+    const f = frame(a, b, limb);
+    for (const mu of Object.keys(table) as Muscle[]) {
+      const cl = level(mu);
+      if (!cl) continue;
+      const [f0, f1, side, off, w] = table[mu]!;
+      // Facing the viewer only front muscles show; from behind only back ones.
+      if (front && (p.view === 'back' ? side > 0 || mu === 'chest' : side < 0)) continue;
+      const along = ((f0 + f1) / 2) * f.len;
+      const o = front ? 0 : side * off;
+      if (p.view === 'back' && mu === 'obliques') continue;
+      const base: V = [a[0] + f.d[0] * along + f.n[0] * o, a[1] + f.d[1] * along + f.n[1] * o];
+      const centres: V[] = [];
+      if (front && !limb && (mu === 'chest' || mu === 'obliques' || mu === 'lats')) {
+        const s = mu === 'chest' ? 6.5 : mu === 'lats' ? 9 : 10;
+        centres.push([base[0] + f.n[0] * s, base[1] + f.n[1] * s], [base[0] - f.n[0] * s, base[1] - f.n[1] * s]);
+      } else centres.push(base);
+      const rx = Math.max(3, ((f1 - f0) * f.len) / 2);
+      for (const c of centres) poly(ellipse(c, f.angle, rx, front && mu === 'chest' ? 5.5 : w), cl, false, dim);
+    }
+  };
+
+  const body = (dim: boolean): Cls => (dim ? 'bodyFar' : 'body');
+
+  const leg = (hip: V, knee: V, ankle: V, toe: V, dim: boolean) => {
+    poly(capsule(hip, knee, 8, 6), body(dim), true, dim);
+    muscles(hip, knee, THIGH, true, dim);
+    poly(capsule(knee, ankle, 6, 4.2), body(dim), true, dim);
+    muscles(knee, ankle, SHIN, true, dim);
+    poly(capsule(ankle, toe, 3.8, 2.8), body(dim), true, dim);
+  };
+  const arm = (sh: V, el: V, hand: V, dim: boolean) => {
+    poly(capsule(sh, el, 5.6, 4.4), body(dim), true, dim);
+    muscles(sh, el, UPPER_ARM, true, dim);
+    poly(capsule(el, hand, 4.4, 3.4), body(dim), true, dim);
+    muscles(el, hand, FOREARM, true, dim);
+    out.push({ k: 'c', c: hand, r: 4, fill: true, w: 0, cl: body(dim), dim });
+  };
 
   const propPrims = (pr: Prop) => {
     switch (pr.k) {
@@ -264,25 +383,48 @@ export function draw(m: Move, p: Pose): Prim[] {
   const isScenery = (pr: Prop) => pr.k === 'line' || pr.k === 'rect' || pr.k === 'circle' || pr.k === 'cable' || pr.k === 'water';
   const isFar = (pr: Prop) => 'at' in pr && pr.at.endsWith('2');
 
-  const [vx, , vw] = m.vb ?? [0, 0, VIEW.w, VIEW.h];
   if (!m.noFloor) line([vx, GROUND], [vx + vw, GROUND], 2, 'scene');
   props.filter(isScenery).forEach(propPrims);
 
-  // Far limbs first, then torso and head, then near limbs.
-  const W = 7;
-  line(j.hip2, j.knee2, W, 'far'); line(j.knee2, j.ankle2, W, 'far'); line(j.ankle2, j.toe2, 5, 'far');
-  line(j.shoulder2, j.elbow2, W, 'far'); line(j.elbow2, j.hand2, W, 'far');
-  props.filter((pr) => !isScenery(pr) && isFar(pr)).forEach(propPrims);
-
-  line(j.hip, j.neck, 10, 'fig');
-  if (front) {
-    line(j.shoulder, j.shoulder2, 8, 'fig');
-    line(j.hip1, j.hip2, 8, 'fig');
+  // Far side (dimmed) first.
+  // (Facing the viewer, both arms are in front of the torso, so the far arm comes later.)
+  leg(j.hip2, j.knee2, j.ankle2, j.toe2, !front);
+  if (!front) {
+    arm(j.shoulder2, j.elbow2, j.hand2, true);
+    props.filter((pr) => !isScenery(pr) && isFar(pr)).forEach(propPrims);
   }
-  out.push({ k: 'c', c: j.head, r: L.head, fill: true, w: 0, cl: 'fig' });
 
-  line(j.hip1, j.knee, W, 'fig'); line(j.knee, j.ankle, W, 'fig'); line(j.ankle, j.toe, 5, 'fig');
-  line(j.shoulder, j.elbow, W, 'fig'); line(j.elbow, j.hand, W, 'fig');
+  // Torso: shaped outline (hips, waist, chest, shoulders).
+  const tf = frame(j.hip, j.neck, false);
+  const prof: [number, number, number][] = front
+    ? [[0, 13, 13], [0.45, 11, 11], [0.78, 15, 15], [1, 14, 14]]
+    : [[0, 8, 9.5], [0.45, 7, 7], [0.76, 10, 8], [1, 7, 7.5]];
+  const at = (f: number, s: number): V => [
+    j.hip[0] + tf.d[0] * f * tf.len + tf.n[0] * s,
+    j.hip[1] + tf.d[1] * f * tf.len + tf.n[1] * s,
+  ];
+  const torso: V[] = [
+    ...prof.map(([f, fw]) => at(f, fw)),
+    at(1.08, 0),
+    ...[...prof].reverse().map(([f, , bw]) => at(f, -bw)),
+    at(-0.1, 0),
+  ];
+  if (front) poly(capsule(j.shoulder, j.shoulder2, 6.5, 6.5), 'body', true);
+  poly(torso, 'body', true);
+  muscles(j.hip, j.neck, TORSO, false, false);
+  if (tg?.p.includes('cardio') || tg?.s.includes('cardio')) {
+    out.push({ k: 'c', c: at(0.72, front ? -5 : 3), r: 4.5, fill: true, w: 0, cl: 'heart' });
+  }
+  poly(capsule(j.neck, add(j.neck, vec(p.t + (p.h ?? 0), 9)), 4.5, 4.5), 'body', true);
+  out.push({ k: 'c', c: j.head, r: 10, fill: true, w: 0, cl: 'body' });
+
+  // Near side.
+  if (front) {
+    arm(j.shoulder2, j.elbow2, j.hand2, false);
+    props.filter((pr) => !isScenery(pr) && isFar(pr)).forEach(propPrims);
+  }
+  leg(j.hip1, j.knee, j.ankle, j.toe, false);
+  arm(j.shoulder, j.elbow, j.hand, false);
   props.filter((pr) => !isScenery(pr) && !isFar(pr)).forEach(propPrims);
   return out;
 }

@@ -41,7 +41,7 @@ function orbit(cx: number, cy: number, rx: number, ry: number, n: number, bend: 
 
 export const MOVES: Record<string, Move> = {
   squat: {
-    props: [{ k: 'bb', at: 'shoulder', dx: -4, dy: -2 }],
+    props: [{ k: 'bb', at: 'shoulder', dx: -9, dy: 2 }],
     frames: [
       { t: 90, ua: -120, fa: 60, at: ['ankle', 100, A] },
       { t: 50, ua: -160, fa: 20, th: 0, sh: -110, at: ['ankle', 100, A] },
@@ -208,8 +208,8 @@ export const MOVES: Record<string, Move> = {
   reverseFly: {
     props: [{ k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     frames: [
-      { view: 'front', t: 90, tl: 0.45, h: 0, ua: -92, fa: -90, th: -95, sh: -88, at: ['ground', 100] },
-      { view: 'front', t: 90, tl: 0.45, h: 0, ua: -8, fa: -12, th: -95, sh: -88, at: ['ground', 100] },
+      { view: 'back', t: 90, tl: 0.45, h: 0, ua: -92, fa: -90, th: -95, sh: -88, at: ['ground', 100] },
+      { view: 'back', t: 90, tl: 0.45, h: 0, ua: -8, fa: -12, th: -95, sh: -88, at: ['ground', 100] },
     ],
   },
   dbRow: {

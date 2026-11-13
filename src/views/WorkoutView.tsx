@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import Dexie from 'dexie';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, parseNum, todayISO, type Entry, type Exercise, type PlanItem } from '../db';
+import { db, todayISO, type Entry, type Exercise, type PlanItem } from '../db';
 import { useI18n } from '../i18n';
 import { ExercisePicker } from '../components/ExercisePicker';
 import { PlanPicker } from '../components/PlanPicker';
-import { FIELDS, planDefault, useExerciseFormat, type Field } from '../exerciseFormat';
+import { useExerciseFormat } from '../exerciseFormat';
 import { ExerciseInfo } from '../components/ExerciseInfo';
-import { fmtClock, getDefaultRest, useTimer } from '../timer';
-import { beep, finishedSignal, keepAwake, unlockAudio } from '../sound';
+import { SetInputs, SetList, useSetLogger } from '../components/SetLogger';
+import { FocusView } from './FocusView';
+import { getDefaultRest, useTimer } from '../timer';
 
 function shiftDate(iso: string, days: number) {
   const d = new Date(iso + 'T12:00:00');
@@ -22,6 +22,7 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
   const [picking, setPicking] = useState<'exercise' | 'plan' | null>(null);
   // Exercises opened for this day that have no entries yet.
   const [pending, setPending] = useState<number[]>([]);
+  const [focus, setFocus] = useState(false);
 
   useEffect(() => setPending([]), [date]);
 
@@ -52,6 +53,7 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
   const attachPlan = async (planId: number) => {
     await db.days.put({ ...(day ?? { date }), planId });
     setPicking(null);
+    setFocus(true);
   };
 
   const detachPlan = async () => {
@@ -93,6 +95,9 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
             <h2>{lt(plan.name)}</h2>
             <button className="icon-btn small" aria-label={t.removePlan} onClick={detachPlan}>×</button>
           </div>
+          <button className="primary wide start-btn" onClick={() => setFocus(true)}>
+            ▶ {entries?.length ? t.continueWorkout : t.startWorkout}
+          </button>
           {plan.sections.map((sec, si) => {
             // Group consecutive superset items together.
             const blocks: ReactNode[] = [];
@@ -168,6 +173,17 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
         />
       )}
       {picking === 'plan' && <PlanPicker onPick={attachPlan} onClose={() => setPicking(null)} />}
+      {focus && plan && (
+        <FocusView
+          plan={plan}
+          date={date}
+          day={day}
+          entries={entries ?? []}
+          exByKey={exByKey}
+          onClose={() => setFocus(false)}
+          onToggle={toggleDone}
+        />
+      )}
     </div>
   );
 }
@@ -182,63 +198,15 @@ function ExerciseCard({ exercise, date, entries, item, rest, targetText, onClose
   onClose?: () => void;
 }) {
   const { t, exName, fmtDate } = useI18n();
-  const { fieldLabel, describe } = useExerciseFormat();
+  const { describe } = useExerciseFormat();
   const { startRest } = useTimer();
   const [info, setInfo] = useState(false);
-  const { fields, required } = FIELDS[exercise.type];
-  const [fa, fb] = fields;
-  const [a, setA] = useState('');
-  const [b, setB] = useState('');
 
-  // Most recent entries for this exercise on an earlier day, to show "last time" and prefill.
-  const previous = useLiveQuery(async () => {
-    const prior = await db.entries
-      .where('[exerciseId+date]')
-      .between([exercise.id!, Dexie.minKey], [exercise.id!, date], true, false)
-      .toArray();
-    if (!prior.length) return null;
-    const lastDate = prior[prior.length - 1].date;
-    return prior.filter((e) => e.date === lastDate);
-  }, [exercise.id, date]);
-
-  // Prefill: last set today → first set last time → plan target.
-  const source = entries[entries.length - 1] ?? previous?.[0];
-  const str = (v: number | undefined) => (v != null ? String(v) : '');
-  useEffect(() => {
-    if (source) {
-      setA(str(source[fa]));
-      setB(str(source[fb]));
-    } else if (previous === null && item) {
-      setB(planDefault(item));
-    }
-  }, [source?.id, previous === null, exercise.type]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const va = parseNum(a);
-  const vb = parseNum(b);
-  const vals: Partial<Record<Field, number | undefined>> = { [fa]: va, [fb]: vb };
-  const canAdd = required.length ? required.every((f) => vals[f] != null) : va != null || vb != null;
-
-  const add = async (override?: Partial<Record<Field, number | undefined>>) => {
-    const v0 = { ...vals, ...override };
-    const ok = required.length ? required.every((f) => v0[f] != null) : v0[fa] != null || v0[fb] != null;
-    if (!ok) return;
-    unlockAudio();
-    const rec: Entry = { date, exerciseId: exercise.id!, createdAt: Date.now() };
-    for (const f of fields) {
-      let v = v0[f];
-      if (f === 'weight') v = v ?? 0;
-      if (f === 'reps' && v != null) v = Math.round(v);
-      if (v != null) rec[f] = v;
-    }
-    await db.entries.add(rec);
+  const logger = useSetLogger(exercise, date, entries, item, () => {
     const isLastSet = item?.sets != null && entries.length + 1 >= item.sets;
     if (rest > 0 && !isLastSet) startRest(rest);
-  };
-
-  const remove = async (id: number) => {
-    if (confirm(t.confirmDelete)) await db.entries.delete(id);
-  };
-
+  });
+  const { previous } = logger;
   const done = item?.sets != null && entries.length >= item.sets;
 
   return (
@@ -255,77 +223,9 @@ function ExerciseCard({ exercise, date, entries, item, rest, targetText, onClose
           {t.lastTime} ({fmtDate(previous[0].date)}): {previous.map((e) => describe(e, exercise)).join(', ')}
         </p>
       )}
-      {entries.length > 0 && (
-        <ol className="sets">
-          {entries.map((e, i) => (
-            <li key={e.id}>
-              <span className="set-no">{i + 1}</span>
-              <span className="set-val">{describe(e, exercise)}</span>
-              <button className="icon-btn small" aria-label={t.delete} onClick={() => remove(e.id!)}>×</button>
-            </li>
-          ))}
-        </ol>
-      )}
-      <form className="add-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
-        <label>
-          <span>{fieldLabel(fa, exercise)}</span>
-          <input inputMode="decimal" value={a} onChange={(e) => setA(e.target.value)} onFocus={(e) => e.target.select()} />
-        </label>
-        <label>
-          <span>{fieldLabel(fb, exercise)}</span>
-          <input inputMode={fb === 'reps' ? 'numeric' : 'decimal'} value={b} onChange={(e) => setB(e.target.value)} onFocus={(e) => e.target.select()} />
-        </label>
-        <button className="primary" disabled={!canAdd}>{t.add}</button>
-      </form>
-      {exercise.type === 'hold' && (
-        <HoldTimer target={parseNum(planDefault(item) || b) ?? 0} onDone={(sec) => add({ seconds: sec })} />
-      )}
+      <SetList exercise={exercise} entries={entries} />
+      <SetInputs exercise={exercise} logger={logger} item={item} />
       {info && <ExerciseInfo exercise={exercise} onClose={() => setInfo(false)} />}
     </section>
-  );
-}
-
-/** Stopwatch for timed holds: 3 s to get in position, then counts up; beeps at the target. */
-function HoldTimer({ target, onDone }: { target: number; onDone: (seconds: number) => void }) {
-  const { t } = useI18n();
-  const [startAt, setStartAt] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    if (startAt == null) return;
-    const id = setInterval(() => setNow(Date.now()), 100);
-    return () => clearInterval(id);
-  }, [startAt]);
-
-  const elapsed = startAt == null ? 0 : (now - startAt) / 1000; // negative while getting ready
-  const sec = Math.floor(elapsed);
-  useEffect(() => {
-    if (startAt == null) return;
-    if (sec < 0) beep(660, 90);
-    else if (sec === 0) beep(1320, 200);
-    else if (target > 0 && sec === target) finishedSignal();
-  }, [sec]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const start = () => {
-    unlockAudio();
-    void keepAwake(true);
-    setNow(Date.now());
-    setStartAt(Date.now() + 3000);
-  };
-  const stop = () => {
-    const s = Math.max(0, Math.round(elapsed));
-    setStartAt(null);
-    void keepAwake(false);
-    if (s > 0) onDone(s);
-  };
-
-  if (startAt == null) {
-    return <button className="ghost wide hold-btn" onClick={start}>⏱ {t.holdStart}{target ? ` (${target} s)` : ''}</button>;
-  }
-  return (
-    <button className={elapsed < 0 ? 'hold-run ready' : target && elapsed >= target ? 'hold-run reached' : 'hold-run'} onClick={stop}>
-      <span>{elapsed < 0 ? t.getReady : t.holdStop}</span>
-      <strong>{elapsed < 0 ? Math.ceil(-elapsed) : fmtClock(elapsed)}</strong>
-    </button>
   );
 }
