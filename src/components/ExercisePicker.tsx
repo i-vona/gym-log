@@ -8,6 +8,7 @@ export function ExercisePicker({ onPick, onClose }: { onPick: (id: number) => vo
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
   const [type, setType] = useState<ExerciseType>('strength');
+  const [oneSide, setOneSide] = useState(false);
 
   const exercises = useLiveQuery(() => db.exercises.toArray());
   const norm = (s: string) => s.toLocaleLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
@@ -18,7 +19,7 @@ export function ExercisePicker({ onPick, onClose }: { onPick: (id: number) => vo
   const create = async () => {
     const name = q.trim();
     if (!name) return;
-    const id = await db.exercises.add({ name, type });
+    const id = await db.exercises.add({ name, type, unilateral: type !== 'cardio' && oneSide });
     onPick(id as number);
   };
 
@@ -43,6 +44,12 @@ export function ExercisePicker({ onPick, onClose }: { onPick: (id: number) => vo
                 <button key={ty} className={type === ty ? 'on' : ''} onClick={() => setType(ty)}>{t[ty]}</button>
               ))}
             </div>
+            {type !== 'cardio' && (
+              <label className="check">
+                <input type="checkbox" checked={oneSide} onChange={(e) => setOneSide(e.target.checked)} />
+                <span>{t.oneSide}</span>
+              </label>
+            )}
             <div className="row-end">
               <button className="ghost" onClick={() => setCreating(false)}>{t.cancel}</button>
               <button className="primary" disabled={!q.trim()} onClick={create}>{t.create}</button>

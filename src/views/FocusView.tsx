@@ -8,7 +8,7 @@ import { MOVES } from '../anim/moves';
 import { MUSCLES } from '../anim/muscles';
 import { ExerciseAnim } from '../components/ExerciseAnim';
 import { ExerciseInfo } from '../components/ExerciseInfo';
-import { SetInputs, SetList, useSetLogger } from '../components/SetLogger';
+import { SetInputs, SetList, setCount, useSetLogger } from '../components/SetLogger';
 
 type Step =
   | { kind: 'check'; si: number; items: { id: string; text: LText }[] }
@@ -67,12 +67,12 @@ export function FocusView({ plan, date, day, entries, exByKey, onClose, onToggle
   const { t, lt, exName } = useI18n();
   const timer = useTimer();
   const steps = useMemo(() => buildSteps(plan, exByKey), [plan, exByKey]);
-  const countFor = (exId: number) => entries.filter((e) => e.exerciseId === exId).length;
+  const countFor = (ex: Exercise) => setCount(entries.filter((e) => e.exerciseId === ex.id), ex);
   const setsFor = (s: Step) => (s.kind === 'ex' ? s.item.sets ?? plan.sections[s.si].circuit?.rounds : undefined);
 
   const isComplete = (s: Step) => {
     if (s.kind === 'check') return s.items.every((i) => day?.done?.includes(i.id));
-    if (s.kind === 'ex') { const n = setsFor(s); return n != null && countFor(s.ex.id!) >= n; }
+    if (s.kind === 'ex') { const n = setsFor(s); return n != null && countFor(s.ex) >= n; }
     return false;
   };
   // Open at the first unfinished step.
@@ -90,14 +90,14 @@ export function FocusView({ plan, date, day, entries, exByKey, onClose, onToggle
 
   /** After a set: move through supersets/circuits and start the right rest. */
   const afterSet = (s: Extract<Step, { kind: 'ex' }>) => {
-    const count = countFor(s.ex.id!) + 1;
+    const count = countFor(s.ex) + 1;
     const sets = setsFor(s);
     const g = s.group;
     if (g && s.groupKind) {
       const pos = g.indexOf(idx);
       if (pos < g.length - 1) return go(g[pos + 1]);
       const first = steps[g[0]] as Extract<Step, { kind: 'ex' }>;
-      const firstDone = (g[0] === idx ? count : countFor(first.ex.id!)) >= (setsFor(first) ?? 1);
+      const firstDone = (g[0] === idx ? count : countFor(first.ex)) >= (setsFor(first) ?? 1);
       const rest = s.groupKind === 'circuit' ? plan.sections[s.si].circuit!.rest : s.item.rest ?? 0;
       if (rest > 0) timer.startRest(rest);
       return go(firstDone ? g[g.length - 1] + 1 : g[0]);
@@ -201,8 +201,9 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
   const [info, setInfo] = useState(false);
   const move = ex.key ? MOVES[ex.key] : undefined;
   const targets = ex.key ? MUSCLES[ex.key] : undefined;
-  const done = sets != null && entries.length >= sets;
-  const current = Math.min(entries.length + 1, sets ?? entries.length + 1);
+  const n = setCount(entries, ex);
+  const done = sets != null && n >= sets;
+  const current = Math.min(n + 1, sets ?? n + 1);
 
   return (
     <section className="focus-ex">
@@ -222,7 +223,7 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
 
       {sets != null && (
         <div className="set-dots" aria-label={`${t.setWord} ${current} ${t.ofWord} ${sets}`}>
-          {Array.from({ length: sets }, (_, i) => <span key={i} className={i < entries.length ? 'on' : i === entries.length ? 'cur' : ''} />)}
+          {Array.from({ length: sets }, (_, i) => <span key={i} className={i < n ? 'on' : i === n ? 'cur' : ''} />)}
           <span className="set-dots-label">{done ? t.allSetsDone : `${t.setWord} ${current} ${t.ofWord} ${sets}`}</span>
         </div>
       )}
@@ -231,6 +232,7 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
         <p className="hint">{t.lastTime} ({fmtDate(logger.previous[0].date)}): {logger.previous.map((e) => describe(e, ex)).join(', ')}</p>
       )}
 
+      {ex.unilateral && !done && <p className="side-hint">{t.sidesShortHint}</p>}
       {done
         ? <button className="primary wide" onClick={onNext}>{t.next} ›</button>
         : <SetInputs exercise={ex} logger={logger} item={item} big addLabel={t.logSet} />}

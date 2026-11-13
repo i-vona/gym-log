@@ -15,6 +15,8 @@ export interface Exercise {
   type: ExerciseType;
   /** Machine/band-assisted: the logged weight is assistance, so lower is better. */
   assisted?: boolean;
+  /** Trained one side at a time: each set is logged for the left and the right. */
+  unilateral?: boolean;
 }
 
 /** One logged set (strength/hold/carry) or one cardio session. `date` is YYYY-MM-DD. */
@@ -28,6 +30,8 @@ export interface Entry {
   distance?: number;
   seconds?: number;
   meters?: number;
+  /** Left or right, for one-sided exercises. */
+  side?: 'L' | 'R';
   createdAt: number;
 }
 
@@ -80,7 +84,7 @@ export interface Day {
   done?: string[];
 }
 
-export const BUILTIN_EXERCISES: { key: string; type: ExerciseType; assisted?: boolean }[] = [
+export const BUILTIN_EXERCISES: { key: string; type: ExerciseType; assisted?: boolean; unilateral?: boolean }[] = [
   { key: 'squat', type: 'strength' },
   { key: 'bench', type: 'strength' },
   { key: 'deadlift', type: 'strength' },
@@ -90,7 +94,7 @@ export const BUILTIN_EXERCISES: { key: string; type: ExerciseType; assisted?: bo
   { key: 'latPulldown', type: 'strength' },
   { key: 'dips', type: 'strength' },
   { key: 'legPress', type: 'strength' },
-  { key: 'lunge', type: 'strength' },
+  { key: 'lunge', type: 'strength', unilateral: true },
   { key: 'hipThrust', type: 'strength' },
   { key: 'rdl', type: 'strength' },
   { key: 'legCurl', type: 'strength' },
@@ -101,20 +105,20 @@ export const BUILTIN_EXERCISES: { key: string; type: ExerciseType; assisted?: bo
   { key: 'lateralRaise', type: 'strength' },
   { key: 'chestFly', type: 'strength' },
   { key: 'assistedPullup', type: 'strength', assisted: true },
-  { key: 'dbRow', type: 'strength' },
+  { key: 'dbRow', type: 'strength', unilateral: true },
   { key: 'dbOhp', type: 'strength' },
   { key: 'reverseFly', type: 'strength' },
   { key: 'hangingKneeRaise', type: 'strength' },
   { key: 'plateCrunch', type: 'strength' },
   { key: 'abWheel', type: 'strength' },
-  { key: 'woodchopper', type: 'strength' },
+  { key: 'woodchopper', type: 'strength', unilateral: true },
   { key: 'deadBug', type: 'strength' },
   { key: 'russianTwist', type: 'strength' },
   { key: 'gluteBridge', type: 'strength' },
   { key: 'plank', type: 'hold' },
-  { key: 'sidePlank', type: 'hold' },
+  { key: 'sidePlank', type: 'hold', unilateral: true },
   { key: 'hollowHold', type: 'hold' },
-  { key: 'suitcaseCarry', type: 'carry' },
+  { key: 'suitcaseCarry', type: 'carry', unilateral: true },
   { key: 'farmerCarry', type: 'carry' },
   { key: 'running', type: 'cardio' },
   { key: 'treadmill', type: 'cardio' },
@@ -152,7 +156,15 @@ db.version(2).stores({
  */
 export async function ensureSeed() {
   await db.transaction('rw', db.exercises, db.plans, db.meta, async () => {
-    const have = new Set((await db.exercises.toArray()).map((e) => e.key).filter(Boolean));
+    const stored = await db.exercises.toArray();
+    const have = new Set(stored.map((e) => e.key).filter(Boolean));
+    // Keep flags of built-ins in step with the code.
+    for (const b of BUILTIN_EXERCISES) {
+      const e = stored.find((x) => x.key === b.key);
+      if (e && (!!e.unilateral !== !!b.unilateral || !!e.assisted !== !!b.assisted)) {
+        await db.exercises.update(e.id!, { unilateral: b.unilateral, assisted: b.assisted });
+      }
+    }
     const missing = BUILTIN_EXERCISES.filter((e) => !have.has(e.key));
     if (missing.length) await db.exercises.bulkAdd(missing.map((e) => ({ ...e })));
 

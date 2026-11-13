@@ -6,7 +6,7 @@ import { ExercisePicker } from '../components/ExercisePicker';
 import { PlanPicker } from '../components/PlanPicker';
 import { useExerciseFormat } from '../exerciseFormat';
 import { ExerciseInfo } from '../components/ExerciseInfo';
-import { SetInputs, SetList, useSetLogger } from '../components/SetLogger';
+import { SetInputs, SetList, setCount, useSetLogger } from '../components/SetLogger';
 import { FocusView } from './FocusView';
 import { getDefaultRest, useTimer } from '../timer';
 
@@ -203,18 +203,19 @@ function ExerciseCard({ exercise, date, entries, item, rest, targetText, onClose
   const [info, setInfo] = useState(false);
 
   const logger = useSetLogger(exercise, date, entries, item, () => {
-    const isLastSet = item?.sets != null && entries.length + 1 >= item.sets;
+    const isLastSet = item?.sets != null && setCount(entries, exercise) + 1 >= item.sets;
     if (rest > 0 && !isLastSet) startRest(rest);
   });
   const { previous } = logger;
-  const done = item?.sets != null && entries.length >= item.sets;
+  const n = setCount(entries, exercise);
+  const done = item?.sets != null && n >= item.sets;
 
   return (
     <section className={done ? 'card card-done' : 'card'}>
       <header className="card-head">
         <h2>{exName(exercise)}</h2>
         <button className="info-btn" aria-label={t.aboutExercise} onClick={() => setInfo(true)}>i</button>
-        {item?.sets != null && <span className="set-count">{entries.length}/{item.sets}</span>}
+        {item?.sets != null && <span className="set-count">{n}/{item.sets}</span>}
         {onClose && entries.length === 0 && <button className="icon-btn small" aria-label={t.close} onClick={onClose}>×</button>}
       </header>
       {targetText && <p className="target">{targetText}</p>}

@@ -121,6 +121,21 @@ const en = {
   step: 'Step',
   aboutExercise: 'About this exercise',
   musclesWorked: 'Muscles worked',
+  left: 'Left',
+  right: 'Right',
+  leftShort: 'L',
+  rightShort: 'R',
+  stop: 'Stop',
+  oneSide: 'One side at a time (log left and right)',
+  sidesTitle: 'Left and right side',
+  sidesAdvice1: 'Alternate sides set by set: left, right, then rest. Each side rests while the other works, so both are equally fresh for every set.',
+  sidesAdvice2: 'Start with your weaker side. On the stronger side do the same number of reps, not more, so the two sides even out.',
+  sidesWhy: 'Why: no study has directly compared the two orders. Research on crossover fatigue (a meta-analysis of about 50 studies) found that tiring one side barely affects the other side’s strength, but noticeably reduces how many reps it can do. With higher-rep sets like these, doing all sets on one side first can leave the second side short.',
+  sidesSource: 'Behm et al. 2021, Sports Medicine',
+  sidesShortHint: 'Left, then right, then rest. Start with your weaker side.',
+  myResults: 'Your results',
+  bestSet: 'Best set',
+  noEntriesYet: 'This exercise has no entries yet.',
 };
 
 type Dict = typeof en;
@@ -242,6 +257,21 @@ const hr: Dict = {
   step: 'Korak',
   aboutExercise: 'O vježbi',
   musclesWorked: 'Mišići koje vježba radi',
+  left: 'Lijeva',
+  right: 'Desna',
+  leftShort: 'L',
+  rightShort: 'D',
+  stop: 'Stani',
+  oneSide: 'Jedna strana po jedna (upis za lijevu i desnu)',
+  sidesTitle: 'Lijeva i desna strana',
+  sidesAdvice1: 'Izmjenjuj strane po seriji: lijeva, desna, pa pauza. Jedna strana se odmara dok druga radi, pa su obje jednako odmorne za svaku seriju.',
+  sidesAdvice2: 'Počni slabijom stranom. Jačom stranom napravi isti broj ponavljanja, ne više, da se strane izjednače.',
+  sidesWhy: 'Zašto: nijedno istraživanje nije izravno usporedilo ta dva redoslijeda. Istraživanja prijenosnog umora (meta-analiza oko 50 studija) pokazuju da umor jedne strane gotovo ne utječe na snagu druge, ali primjetno smanjuje broj ponavljanja koje druga strana može napraviti. Kod serija s više ponavljanja, kao ovdje, rad svih serija prvo jednom stranom može oslabiti drugu stranu.',
+  sidesSource: 'Behm i sur. 2021, Sports Medicine',
+  sidesShortHint: 'Lijeva, pa desna, pa pauza. Počni slabijom stranom.',
+  myResults: 'Tvoji rezultati',
+  bestSet: 'Najbolja serija',
+  noEntriesYet: 'Ova vježba još nema unosa.',
 };
 
 const muscleNames: Record<Muscle, [en: string, hr: string]> = {

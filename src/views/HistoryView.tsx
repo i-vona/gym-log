@@ -1,25 +1,9 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Entry, type Exercise } from '../db';
+import { db, type Entry } from '../db';
 import { useI18n } from '../i18n';
-import { useExerciseFormat } from '../exerciseFormat';
-
-/** The set that best represents the day: heaviest (or least assisted), longest hold, etc. */
-function bestSet(es: Entry[], ex: Exercise | undefined): Entry {
-  const score = (e: Entry): [number, number] => {
-    const w = e.weight ?? 0;
-    switch (ex?.type) {
-      case 'hold': return [e.seconds ?? 0, w];
-      case 'carry': return [w, e.meters ?? 0];
-      default: return ex?.assisted ? [-w, e.reps ?? 0] : [w, e.reps ?? 0];
-    }
-  };
-  return es.reduce((b, e) => {
-    const [x1, x2] = score(e);
-    const [y1, y2] = score(b);
-    return x1 > y1 || (x1 === y1 && x2 > y2) ? e : b;
-  });
-}
+import { bestEntry, useExerciseFormat } from '../exerciseFormat';
+import { setCount } from '../components/SetLogger';
 
 function weekStart(d: Date) {
   const x = new Date(d);
@@ -69,7 +53,7 @@ export function HistoryView({ openDay }: { openDay: (date: string) => void }) {
                   const km = es.reduce((s, e) => s + (e.distance ?? 0), 0);
                   summary = [min && `${fmtNum(min)} min`, km && `${fmtNum(km, 2)} km`].filter(Boolean).join(' · ');
                 } else {
-                  summary = `${t.sets}: ${es.length} · ${t.best} ${describe(bestSet(es, ex), ex)}`;
+                  summary = `${t.sets}: ${ex ? setCount(es, ex) : es.length} · ${t.best} ${describe(bestEntry(es, ex), ex)}`;
                 }
                 return (
                   <li key={id}><span>{exName(ex)}</span><span className="muted">{summary}</span></li>

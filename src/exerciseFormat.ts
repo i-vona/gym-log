@@ -58,3 +58,21 @@ export function useExerciseFormat() {
 export function planDefault(it: PlanItem | undefined): string {
   return it?.target ? it.target.split('-')[0].trim() : '';
 }
+
+/** The set that best represents performance: heaviest (or least assisted), longest hold, etc. */
+export function bestEntry(es: Entry[], ex: Exercise | undefined): Entry {
+  const score = (e: Entry): [number, number] => {
+    const w = e.weight ?? 0;
+    switch (ex?.type) {
+      case 'hold': return [e.seconds ?? 0, w];
+      case 'carry': return [w, e.meters ?? 0];
+      case 'cardio': return [e.distance ?? 0, e.minutes ?? 0];
+      default: return ex?.assisted ? [-w, e.reps ?? 0] : [w, e.reps ?? 0];
+    }
+  };
+  return es.reduce((b, e) => {
+    const [x1, x2] = score(e);
+    const [y1, y2] = score(b);
+    return x1 > y1 || (x1 === y1 && x2 > y2) ? e : b;
+  });
+}
