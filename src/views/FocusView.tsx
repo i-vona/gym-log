@@ -4,6 +4,7 @@ import { useI18n } from '../i18n';
 import { useExerciseFormat } from '../exerciseFormat';
 import { fmtClock, useTimer } from '../timer';
 import { keepAwake } from '../sound';
+import { recommendedRest } from '../rest';
 import { MOVES } from '../anim/moves';
 import { MUSCLES } from '../anim/muscles';
 import { ExerciseAnim } from '../components/ExerciseAnim';
@@ -88,6 +89,13 @@ export function FocusView({ plan, date, day, entries, exByKey, onClose, onToggle
 
   const go = (i: number) => { setIdx(Math.max(0, Math.min(steps.length - 1, i))); window.scrollTo(0, 0); };
 
+  /** Rest before moving on to step i: the recommended rest before that exercise. */
+  const restBefore = (i: number) => {
+    const s = steps[i];
+    return s?.kind === 'ex' ? recommendedRest(s.ex).next : 0;
+  };
+  const rest = (seconds: number) => { if (seconds > 0) timer.startRest(seconds); };
+
   /** After a set: move through supersets/circuits and start the right rest. */
   const afterSet = (s: Extract<Step, { kind: 'ex' }>) => {
     const count = countFor(s.ex) + 1;
@@ -95,15 +103,23 @@ export function FocusView({ plan, date, day, entries, exByKey, onClose, onToggle
     const g = s.group;
     if (g && s.groupKind) {
       const pos = g.indexOf(idx);
-      if (pos < g.length - 1) return go(g[pos + 1]);
+      if (pos < g.length - 1) return go(g[pos + 1]); // no rest inside a superset/circuit round
       const first = steps[g[0]] as Extract<Step, { kind: 'ex' }>;
       const firstDone = (g[0] === idx ? count : countFor(first.ex)) >= (setsFor(first) ?? 1);
-      const rest = s.groupKind === 'circuit' ? plan.sections[s.si].circuit!.rest : s.item.rest ?? 0;
-      if (rest > 0) timer.startRest(rest);
-      return go(firstDone ? g[g.length - 1] + 1 : g[0]);
+      if (firstDone) {
+        const nextIdx = g[g.length - 1] + 1;
+        rest(restBefore(nextIdx));
+        return go(nextIdx);
+      }
+      rest(s.groupKind === 'circuit' ? plan.sections[s.si].circuit!.rest : s.item.rest ?? recommendedRest(s.ex).set);
+      return go(g[0]);
     }
-    if (s.item.rest) timer.startRest(s.item.rest);
-    if (sets != null && count >= sets) go(idx + 1);
+    if (sets != null && count >= sets) {
+      rest(restBefore(idx + 1));
+      go(idx + 1);
+    } else {
+      rest(s.item.rest ?? recommendedRest(s.ex).set);
+    }
   };
 
   const section = step.kind === 'done' ? undefined : plan.sections[step.si];
@@ -238,7 +254,7 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
         : <SetInputs exercise={ex} logger={logger} item={item} big addLabel={t.logSet} />}
 
       <SetList exercise={ex} entries={entries} />
-      {info && <ExerciseInfo exercise={ex} onClose={() => setInfo(false)} />}
+      {info && <ExerciseInfo exercise={ex} planRest={item.rest} onClose={() => setInfo(false)} />}
     </section>
   );
 }

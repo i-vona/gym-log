@@ -9,6 +9,7 @@ import { ExerciseInfo } from '../components/ExerciseInfo';
 import { SetInputs, SetList, setCount, useSetLogger } from '../components/SetLogger';
 import { FocusView } from './FocusView';
 import { getDefaultRest, useTimer } from '../timer';
+import { recommendedRest } from '../rest';
 
 function shiftDate(iso: string, days: number) {
   const d = new Date(iso + 'T12:00:00');
@@ -68,7 +69,7 @@ export function WorkoutView({ date, setDate }: { date: string; setDate: (d: stri
       date={date}
       entries={entriesFor(ex.id!)}
       item={item}
-      rest={midSuperset ? 0 : item ? item.rest ?? 0 : ex.type === 'cardio' ? 0 : getDefaultRest()}
+      rest={midSuperset ? 0 : item ? item.rest ?? 0 : ex.type === 'cardio' ? 0 : getDefaultRest() < 0 ? recommendedRest(ex).set : getDefaultRest()}
       targetText={item ? target(item) : undefined}
       onClose={item ? undefined : () => setPending((p) => p.filter((x) => x !== ex.id))}
     />
@@ -226,7 +227,7 @@ function ExerciseCard({ exercise, date, entries, item, rest, targetText, onClose
       )}
       <SetList exercise={exercise} entries={entries} />
       <SetInputs exercise={exercise} logger={logger} item={item} />
-      {info && <ExerciseInfo exercise={exercise} onClose={() => setInfo(false)} />}
+      {info && <ExerciseInfo exercise={exercise} planRest={item?.rest} onClose={() => setInfo(false)} />}
     </section>
   );
 }

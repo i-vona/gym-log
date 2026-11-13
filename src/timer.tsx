@@ -22,13 +22,13 @@ const Ctx = createContext<TimerApi | null>(null);
 
 const REST_KEY = 'defaultRest';
 
-/** Rest after sets of exercises that aren't in a plan (0 = off). Per-device preference. */
+/** Rest after sets of exercises that aren't in a plan (-1 = recommended per exercise, 0 = off). */
 // eslint-disable-next-line react-refresh/only-export-components
 export function getDefaultRest(): number {
   try {
     const v = localStorage.getItem(REST_KEY);
-    return v == null ? 90 : Number(v) || 0;
-  } catch { return 90; }
+    return v == null ? -1 : Number(v) || 0;
+  } catch { return -1; }
 }
 // eslint-disable-next-line react-refresh/only-export-components
 export function setDefaultRest(s: number) {

@@ -68,9 +68,9 @@ export function SettingsView() {
         <h2>{t.defaultRest}</h2>
         <p className="hint">{t.defaultRestHint}</p>
         <div className="seg">
-          {[0, 60, 90, 120, 180].map((s) => (
+          {[-1, 0, 60, 90, 120, 180].map((s) => (
             <button key={s} className={rest === s ? 'on' : ''} onClick={() => { setDefaultRest(s); setRest(s); }}>
-              {s ? fmtClock(s) : t.off}
+              {s < 0 ? t.recommended : s ? fmtClock(s) : t.off}
             </button>
           ))}
         </div>

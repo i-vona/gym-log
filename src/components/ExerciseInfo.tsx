@@ -6,11 +6,13 @@ import { MOVES } from '../anim/moves';
 import { MUSCLES } from '../anim/muscles';
 import { bestEntry, useExerciseFormat } from '../exerciseFormat';
 import { ExerciseAnim, MuscleChips } from './ExerciseAnim';
+import { recommendedRest, restCategory, REST_SOURCES } from '../rest';
+import { fmtClock } from '../timer';
 
 const CROSSOVER_STUDY = 'https://pure.solent.ac.uk/en/publications/non-local-muscle-fatigue-effects-on-muscle-strength-power-and-end-2/';
 
 /** Full page about one exercise: animation, muscles, left/right advice, your results, video. */
-export function ExerciseInfo({ exercise, onClose }: { exercise: Exercise; onClose: () => void }) {
+export function ExerciseInfo({ exercise, onClose, planRest }: { exercise: Exercise; onClose: () => void; planRest?: number }) {
   const { t, exName, fmtDate } = useI18n();
   const { describe } = useExerciseFormat();
   const move = exercise.key ? MOVES[exercise.key] : undefined;
@@ -52,6 +54,8 @@ export function ExerciseInfo({ exercise, onClose }: { exercise: Exercise; onClos
           </section>
         )}
 
+        <RestCard exercise={exercise} planRest={planRest} />
+
         {exercise.unilateral && (
           <section className="card">
             <h2>{t.sidesTitle}</h2>
@@ -88,5 +92,34 @@ export function VideoLink({ exercise }: { exercise: Exercise }) {
     <a className="ghost wide link-as-btn" href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noreferrer">
       ▶ {t.watchVideo}
     </a>
+  );
+}
+
+/** Recommended rest between sets and before the next exercise, with the reason and sources. */
+function RestCard({ exercise, planRest }: { exercise: Exercise; planRest?: number }) {
+  const { t } = useI18n();
+  const cat = restCategory(exercise);
+  const rec = recommendedRest(exercise);
+  const reason = { compound: t.rcompound, moderate: t.rmoderate, isolation: t.risolation, light: t.rlight, core: t.rcore, hold: t.rhold, carry: t.rcarry, cardio: t.rcardio }[cat];
+  const fmt = (s: number) => (s >= 60 ? `${fmtClock(s)} min` : `${s} s`);
+  return (
+    <section className="card">
+      <h2>{t.restCardTitle}</h2>
+      <ul className="records">
+        {cat !== 'cardio' && (
+          <li><span>{t.restBetweenSets}</span><strong>{fmt(rec.set)}</strong>
+            {planRest != null && planRest !== rec.set ? <span className="muted">{t.restInPlan}: {fmt(planRest)}</span> : <span />}
+          </li>
+        )}
+        <li><span>{t.restBeforeNext}</span><strong>{fmt(rec.next)}</strong><span /></li>
+      </ul>
+      <p className="hint">{reason}</p>
+      {exercise.unilateral && <p className="hint">{t.restPerSideNote}</p>}
+      <p className="hint">{t.restNextNote}</p>
+      <details className="sources">
+        <summary>{t.restSourcesLabel}</summary>
+        <ul>{REST_SOURCES.map((src) => <li key={src.url}><a href={src.url} target="_blank" rel="noreferrer">{src.label} ↗</a></li>)}</ul>
+      </details>
+    </section>
   );
 }

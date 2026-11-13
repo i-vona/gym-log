@@ -395,3 +395,7 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 }
 .advice { margin: 0 0 8px; padding-left: 18px; }
 .advice li { margin: 6px 0; }
+.sources summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; }
+.sources ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
+.sources li { margin: 4px 0; }
+.sources a { color: var(--text); }
