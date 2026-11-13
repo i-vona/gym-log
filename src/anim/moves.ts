@@ -260,7 +260,6 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   russianTwist: {
-    props: [{ k: 'db', at: 'hand', front: true }],
     frames: [
       { view: 'front', t: 84, tl: 0.85, ik: [36, -24, 1], ik2: [36, -24, -1], ll: 0.55, th: -40, sh: -100, at: ['hip', 100, 160] },
       { view: 'front', t: 96, tl: 0.85, ik: [-36, -24, 1], ik2: [-36, -24, -1], ll: 0.55, th: -40, sh: -100, at: ['hip', 100, 160] },
@@ -387,6 +386,48 @@ export const MOVES: Record<string, Move> = {
     frames: [
       { t: 90, ua: -85, fa: -85, th: -88, sh: -95, at: ['ankle', 100, A] },
       { t: 15, ua: -90, fa: -90, th: -70, sh: -100, at: ['ankle', 100, A] },
+    ],
+  },
+  facePull: {
+    props: [{ k: 'cable', from: [196, 46], to: 'hand' }, { k: 'grip', at: 'hand' }],
+    frames: [
+      { t: 88, ik: [54, -56, -1], at: ['ankle', 80, A] },
+      { t: 92, ik: [10, -64, -1], at: ['ankle', 80, A] },
+    ],
+  },
+  tricepsPushdown: {
+    props: [{ k: 'cable', from: [130, 0], to: 'hand' }, { k: 'grip', at: 'hand' }],
+    frames: [
+      { t: 84, ua: -95, fa: 70, at: ['ankle', 95, A] },
+      { t: 84, ua: -95, fa: -88, at: ['ankle', 95, A] },
+    ],
+  },
+  cableRow: {
+    props: [{ k: 'rect', x: 50, y: 148, w: 50, h: 7 }, { k: 'line', a: [75, 155], b: [75, 182], w: 4 }, { k: 'line', a: [158, 140], b: [166, 182], w: 6 }, { k: 'cable', from: [190, 128], to: 'hand' }, { k: 'grip', at: 'hand' }],
+    frames: [
+      { t: 68, ikL: [66, 20, -1], ik: [84, -38, 1], at: ['hip', 82, 143] },
+      { t: 96, ikL: [66, 20, -1], ik: [26, -26, 1], at: ['hip', 82, 143] },
+    ],
+  },
+  bandPullApart: {
+    props: [{ k: 'band', a: 'hand', b: 'hand2' }],
+    frames: [
+      { view: 'back', t: 90, ua: -8, fa: -8, al: 0.42, th: -92, sh: -90, at: ['ground', 100] },
+      { view: 'back', t: 90, ua: 2, fa: 0, al: 1, th: -92, sh: -90, at: ['ground', 100] },
+    ],
+  },
+  bandLateralWalk: {
+    props: [{ k: 'band', a: 'knee', b: 'knee2' }],
+    frames: [
+      { view: 'back', t: 90, ik: [8, -38, 1], th: -97, sh: -84, at: ['ground', 100] },
+      { view: 'back', t: 90, ik: [8, -38, 1], th: -72, sh: -84, at: ['ground', 100] },
+    ],
+  },
+  kbSwing: {
+    props: [{ k: 'kb', at: 'hand' }],
+    frames: [
+      { t: 22, ua: -118, fa: -118, th: -70, sh: -100, at: ['ankle', 95, A] },
+      { t: 92, ua: 2, fa: 2, at: ['ankle', 95, A] },
     ],
   },
 };

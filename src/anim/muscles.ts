@@ -50,4 +50,10 @@ export const MUSCLES: Record<string, Targets> = {
   pushUp: { p: ['chest', 'triceps'], s: ['shoulders', 'abs'] },
   dbBench: { p: ['chest', 'triceps'], s: ['shoulders'] },
   dbRdl: { p: ['hamstrings', 'glutes'], s: ['lowerBack', 'forearms'] },
+  facePull: { p: ['rearDelts', 'upperBack'], s: ['biceps'] },
+  tricepsPushdown: { p: ['triceps'], s: [] },
+  cableRow: { p: ['lats', 'upperBack'], s: ['biceps', 'rearDelts'] },
+  bandPullApart: { p: ['rearDelts', 'upperBack'], s: [] },
+  bandLateralWalk: { p: ['glutes'], s: ['quads'] },
+  kbSwing: { p: ['glutes', 'hamstrings'], s: ['lowerBack', 'forearms', 'cardio'] },
 };

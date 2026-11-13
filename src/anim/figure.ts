@@ -39,6 +39,8 @@ export type Prop =
   | { k: 'wheel'; at: Joint }
   | { k: 'pad'; at: Joint; dy?: number; w?: number }
   | { k: 'grip'; at: Joint }
+  | { k: 'band'; a: Joint; b: Joint }
+  | { k: 'kb'; at: Joint }
   | { k: 'seg'; at: Joint; a: number; len: number; w?: number }
   | { k: 'cable'; from: V; to: Joint }
   | { k: 'line'; a: V; b: V; w?: number }
@@ -58,7 +60,7 @@ export interface Move {
   vb?: [number, number, number, number];
 }
 
-export type Cls = 'body' | 'bodyFar' | 'm1' | 'm2' | 'heart' | 'prop' | 'scene' | 'water';
+export type Cls = 'body' | 'bodyFar' | 'm1' | 'm2' | 'heart' | 'prop' | 'band' | 'scene' | 'water';
 export type Prim =
   | { k: 'l'; a: V; b: V; w: number; c: Cls }
   | { k: 'c'; c: V; r: number; fill: boolean; w: number; cl: Cls; dim?: boolean }
@@ -296,8 +298,8 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
       if (p.view === 'back' && mu === 'obliques') continue;
       const base: V = [a[0] + f.d[0] * along + f.n[0] * o, a[1] + f.d[1] * along + f.n[1] * o];
       const centres: V[] = [];
-      if (front && !limb && (mu === 'chest' || mu === 'obliques' || mu === 'lats')) {
-        const s = mu === 'chest' ? 6.5 : mu === 'lats' ? 9 : 10;
+      if (front && !limb && (mu === 'chest' || mu === 'obliques' || mu === 'lats' || mu === 'glutes')) {
+        const s = mu === 'chest' || mu === 'glutes' ? 6.5 : mu === 'lats' ? 9 : 10;
         centres.push([base[0] + f.n[0] * s, base[1] + f.n[1] * s], [base[0] - f.n[0] * s, base[1] - f.n[1] * s]);
       } else centres.push(base);
       const rx = Math.max(3, ((f1 - f0) * f.len) / 2);
@@ -355,6 +357,15 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
       case 'grip':
         out.push({ k: 'c', c: j[pr.at], r: 3.5, fill: true, w: 0, cl: 'prop' });
         break;
+      case 'band':
+        line(j[pr.a], j[pr.b], 3, 'band');
+        break;
+      case 'kb': {
+        const c = j[pr.at];
+        out.push({ k: 'c', c: [c[0], c[1] + 9], r: 8, fill: true, w: 0, cl: 'prop' });
+        out.push({ k: 'c', c: [c[0], c[1] + 2], r: 4, fill: false, w: 2.5, cl: 'prop' });
+        break;
+      }
       case 'seg': {
         const c = j[pr.at];
         const d = vec(pr.a, pr.len / 2);
@@ -411,7 +422,7 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
   ];
   if (front) poly(capsule(j.shoulder, j.shoulder2, 6.5, 6.5), 'body', true);
   poly(torso, 'body', true);
-  muscles(j.hip, j.neck, TORSO, false, false);
+  if (!front) muscles(j.hip, j.neck, TORSO, false, false);
   if (tg?.p.includes('cardio') || tg?.s.includes('cardio')) {
     out.push({ k: 'c', c: at(0.72, front ? -5 : 3), r: 4.5, fill: true, w: 0, cl: 'heart' });
   }
@@ -424,6 +435,8 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
     props.filter((pr) => !isScenery(pr) && isFar(pr)).forEach(propPrims);
   }
   leg(j.hip1, j.knee, j.ankle, j.toe, false);
+  // Facing the viewer (or from behind), the thighs would cover glutes/abs, so draw torso muscles on top.
+  if (front) muscles(j.hip, j.neck, TORSO, false, false);
   arm(j.shoulder, j.elbow, j.hand, false);
   props.filter((pr) => !isScenery(pr) && !isFar(pr)).forEach(propPrims);
   return out;

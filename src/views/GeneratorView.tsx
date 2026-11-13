@@ -4,7 +4,7 @@ import { db, type Exercise, type PlanItem } from '../db';
 import { useI18n } from '../i18n';
 import { useExerciseFormat } from '../exerciseFormat';
 import {
-  candidates, DEFAULT_INPUT, estimateSeconds, FOCUS_NAMES, generate, patternOf, prescribe, toPlan,
+  candidates, DEFAULT_INPUT, estimateSeconds, FOCUS_NAMES, generate, normalizeInput, patternOf, prescribe, toPlan,
   type Draft, type Equip, type Focus, type GenInput, type Goal, type Level, type Sex,
 } from '../generator';
 import { ExercisePicker } from '../components/ExercisePicker';
@@ -29,7 +29,7 @@ export function GeneratorView({ date, onClose, onSaved }: { date: string; onClos
 
   // Remember the answers for next time.
   useEffect(() => {
-    void db.meta.get('genInput').then((m) => m && setInput({ ...DEFAULT_INPUT, ...(m.value as GenInput) }));
+    void db.meta.get('genInput').then((m) => m && setInput(normalizeInput(m.value as GenInput)));
   }, []);
   const set = <K extends keyof GenInput>(k: K, v: GenInput[K]) => setInput((i) => ({ ...i, [k]: v }));
   const toggleFocus = (f: Focus) =>
@@ -82,7 +82,10 @@ export function GeneratorView({ date, onClose, onSaved }: { date: string; onClos
   const minutes = draft ? Math.round(estimateSeconds(draft, exByKey) / 60) : 0;
   const goals: Goal[] = ['strength', 'muscle', 'endurance'];
   const levels: Level[] = [1, 2, 3];
-  const equips: Equip[] = ['gym', 'db', 'none'];
+  const equips: Equip[] = ['gym', 'db', 'kb', 'band'];
+  // Gym means everything; picking a specific item means training elsewhere.
+  const toggleEquip = (e: Equip) =>
+    set('equip', input.equip.includes(e) ? input.equip.filter((x) => x !== e) : e === 'gym' ? ['gym'] : [...input.equip.filter((x) => x !== 'gym'), e]);
   const sexes: Sex[] = ['f', 'm', 'x'];
 
   const row = (list: 'main' | 'cardio', it: PlanItem, i: number) => {
@@ -135,7 +138,8 @@ export function GeneratorView({ date, onClose, onSaved }: { date: string; onClos
             </section>
             <section className="card">
               <h2>{t.genEquip}</h2>
-              <div className="seg">{equips.map((e) => <button key={e} className={input.equip === e ? 'on' : ''} onClick={() => set('equip', e)}>{t[`equip_${e}`]}</button>)}</div>
+              <div className="chips">{equips.map((e) => <button key={e} className={input.equip.includes(e) ? 'chip-btn on' : 'chip-btn'} onClick={() => toggleEquip(e)}>{t[`equip_${e}`]}</button>)}</div>
+              <p className="hint">{input.equip.length ? t.genEquipHint : t.genEquipNone}</p>
             </section>
             <section className="card">
               <h2>{t.genSex}</h2>

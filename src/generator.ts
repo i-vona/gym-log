@@ -8,7 +8,8 @@ import { recommendedRest, restCategory, type RestCategory } from './rest';
 export type Focus = 'full' | 'upper' | 'lower' | 'back' | 'push' | 'arms' | 'core' | 'cardio';
 export type Goal = 'strength' | 'muscle' | 'endurance';
 export type Level = 1 | 2 | 3;
-export type Equip = 'gym' | 'db' | 'none';
+/** Equipment an exercise needs. 'gym' = machines, cables, barbells; a gym also has all the rest. */
+export type Equip = 'gym' | 'db' | 'kb' | 'band' | 'none';
 export type Sex = 'f' | 'm' | 'x';
 
 export interface GenInput {
@@ -16,11 +17,19 @@ export interface GenInput {
   minutes: number;
   goal: Goal;
   level: Level;
-  equip: Equip;
+  /** Equipment available. 'gym' means everything; empty means body weight only. */
+  equip: Equip[];
   sex: Sex;
 }
 
-export const DEFAULT_INPUT: GenInput = { focus: ['full'], minutes: 45, goal: 'muscle', level: 1, equip: 'gym', sex: 'x' };
+export const DEFAULT_INPUT: GenInput = { focus: ['full'], minutes: 45, goal: 'muscle', level: 1, equip: ['gym'], sex: 'x' };
+
+/** Older saved answers stored equipment as a single value. */
+export function normalizeInput(raw: Partial<GenInput> & { equip?: unknown }): GenInput {
+  const e = raw.equip;
+  const equip = Array.isArray(e) ? (e as Equip[]) : e === 'gym' ? ['gym'] : e === 'db' ? ['db'] : e === 'none' ? [] : DEFAULT_INPUT.equip;
+  return { ...DEFAULT_INPUT, ...raw, equip } as GenInput;
+}
 
 type Pattern =
   | 'squat' | 'hinge' | 'lunge' | 'glute' | 'hamCurl' | 'quadIso' | 'calf'
@@ -68,6 +77,12 @@ const META: Record<string, { p: Pattern; eq: Equip; lvl: Level }> = {
   russianTwist: { p: 'coreRot', eq: 'none', lvl: 1 },
   sidePlank: { p: 'coreRot', eq: 'none', lvl: 1 },
   suitcaseCarry: { p: 'carry', eq: 'db', lvl: 1 },
+  facePull: { p: 'rearDelt', eq: 'gym', lvl: 1 },
+  bandPullApart: { p: 'rearDelt', eq: 'band', lvl: 1 },
+  tricepsPushdown: { p: 'triceps', eq: 'gym', lvl: 1 },
+  cableRow: { p: 'pullH', eq: 'gym', lvl: 1 },
+  bandLateralWalk: { p: 'glute', eq: 'band', lvl: 1 },
+  kbSwing: { p: 'hinge', eq: 'kb', lvl: 2 },
   farmerCarry: { p: 'carry', eq: 'db', lvl: 1 },
   treadmill: { p: 'cardio', eq: 'gym', lvl: 1 },
   cycling: { p: 'cardio', eq: 'gym', lvl: 1 },
@@ -89,7 +104,7 @@ const TEMPLATES: Record<Exclude<Focus, 'cardio'>, Pattern[]> = {
   core: ['coreFlex', 'coreAntiExt', 'coreRot', 'carry', 'coreAntiExt', 'coreRot', 'coreFlex'],
 };
 
-const RANK: Record<Equip, number> = { none: 0, db: 1, gym: 2 };
+const has = (input: GenInput, eq: Equip) => eq === 'none' || input.equip.includes('gym') || input.equip.includes(eq);
 
 type Rx = [sets: number, target: string, unit?: PlanItem['unit']];
 const RX: Record<Goal, Record<Exclude<RestCategory, 'cardio'>, Rx>> = {
@@ -179,8 +194,9 @@ function rng(seed: number) {
 /** Exercises that fit a pattern with the given equipment and level, best match first. */
 export function candidates(pattern: string, input: GenInput, exByKey: Map<string, Exercise>): Exercise[] {
   return Object.entries(META)
-    .filter(([key, m]) => m.p === pattern && RANK[m.eq] <= RANK[input.equip] && m.lvl <= Math.max(input.level, 1) + (input.level === 1 ? 0 : 1) && exByKey.has(key))
-    .sort((a, b) => RANK[b[1].eq] - RANK[a[1].eq])
+    .filter(([key, m]) => m.p === pattern && has(input, m.eq) && m.lvl <= input.level + (input.level === 1 ? 0 : 1) && exByKey.has(key))
+    // Exercises with equipment first, body-weight ones after.
+    .sort((a, b) => Number(a[1].eq === 'none') - Number(b[1].eq === 'none'))
     .map(([key]) => exByKey.get(key)!);
 }
 
@@ -246,9 +262,10 @@ export function generate(input: GenInput, exByKey: Map<string, Exercise>, seed: 
     const limit = CORE.includes(p) ? strengthBudget : strengthBudget - coreReserve;
     const options = candidates(p, input, exByKey).filter((e) => !used.has(e.key!));
     if (!options.length) continue;
-    // Prefer exercises that use the available equipment; add some variety.
-    const best = options.filter((e) => RANK[META[e.key!].eq] === RANK[META[options[0].key!].eq]);
-    const pool = rand() < 0.75 ? best : options;
+    // With equipment available, mostly pick exercises that use it (any kind equally:
+    // barbell, machine, cable, dumbbell, kettlebell, band); body-weight ones now and then.
+    const loaded = options.filter((e) => META[e.key!].eq !== 'none');
+    const pool = loaded.length && rand() < 0.8 ? loaded : options;
     const ex = pool[Math.floor(rand() * pool.length)];
     const item = prescribe(ex, input);
     // If it doesn't fit, try fewer sets (down to 2) before skipping: more exercises beat more sets.
