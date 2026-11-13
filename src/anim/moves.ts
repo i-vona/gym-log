@@ -273,9 +273,10 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   sidePlank: {
+    ms: 1800,
     frames: [
-      { t: 168, ua: -90, fa: -150, ua2: 92, fa2: 92, th: -12, sh: -12, th2: -12, sh2: -12, ft: -100, at: ['ankle', 165, 176] },
-      { t: 160, ua: -95, fa: -150, ua2: 92, fa2: 92, th: -2, sh: -6, th2: -2, sh2: -6, ft: -100, at: ['ankle', 165, 176] },
+      { view: 'front', t: 167, ua: 90, fa: 90, ua2: -90, fa2: 190, th: -13, sh: -13, th2: -13, sh2: -13, ft: -100, ft2: -100, at: ['ankle2', 168, 177] },
+      { view: 'front', t: 165, ua: 92, fa: 92, ua2: -90, fa2: 190, th: -11, sh: -11, th2: -11, sh2: -11, ft: -100, ft2: -100, at: ['ankle2', 168, 177] },
     ],
   },
   hollowHold: {
