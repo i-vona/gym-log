@@ -6,8 +6,8 @@ import { fmtClock, useTimer } from '../timer';
 import { keepAwake } from '../sound';
 import { MOVES } from '../anim/moves';
 import { MUSCLES } from '../anim/muscles';
-import { ExerciseAnim, MuscleChips } from '../components/ExerciseAnim';
-import { VideoLink } from '../components/ExerciseInfo';
+import { ExerciseAnim } from '../components/ExerciseAnim';
+import { ExerciseInfo } from '../components/ExerciseInfo';
 import { SetInputs, SetList, useSetLogger } from '../components/SetLogger';
 
 type Step =
@@ -198,6 +198,7 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
   const { describe, target } = useExerciseFormat();
   const { ex, item } = step;
   const logger = useSetLogger(ex, date, entries, item, onLogged);
+  const [info, setInfo] = useState(false);
   const move = ex.key ? MOVES[ex.key] : undefined;
   const targets = ex.key ? MUSCLES[ex.key] : undefined;
   const done = sets != null && entries.length >= sets;
@@ -212,10 +213,12 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
             {step.groupKind === 'superset' ? t.superset : t.round} {step.groupKind === 'superset' ? `${groupPos + 1}/${step.group.length}` : `${current}/${sets}`}
           </span>
         )}
-        <h2>{exName(ex)}</h2>
+        <div className="focus-name-row">
+          <h2>{exName(ex)}</h2>
+          <button className="info-btn big" aria-label={t.aboutExercise} onClick={() => setInfo(true)}>i</button>
+        </div>
         <p className="target">{target(item)}</p>
       </div>
-      <MuscleChips targets={targets} />
 
       {sets != null && (
         <div className="set-dots" aria-label={`${t.setWord} ${current} ${t.ofWord} ${sets}`}>
@@ -233,7 +236,7 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
         : <SetInputs exercise={ex} logger={logger} item={item} big addLabel={t.logSet} />}
 
       <SetList exercise={ex} entries={entries} />
-      <VideoLink exercise={ex} />
+      {info && <ExerciseInfo exercise={ex} onClose={() => setInfo(false)} />}
     </section>
   );
 }

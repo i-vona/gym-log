@@ -213,7 +213,7 @@ function ExerciseCard({ exercise, date, entries, item, rest, targetText, onClose
     <section className={done ? 'card card-done' : 'card'}>
       <header className="card-head">
         <h2>{exName(exercise)}</h2>
-        <button className="info-btn" aria-label={t.howTo} onClick={() => setInfo(true)}>?</button>
+        <button className="info-btn" aria-label={t.aboutExercise} onClick={() => setInfo(true)}>i</button>
         {item?.sets != null && <span className="set-count">{entries.length}/{item.sets}</span>}
         {onClose && entries.length === 0 && <button className="icon-btn small" aria-label={t.close} onClick={onClose}>×</button>}
       </header>

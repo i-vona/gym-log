@@ -119,6 +119,8 @@ const en = {
   primaryMuscles: 'Main muscles',
   secondaryMuscles: 'Also works',
   step: 'Step',
+  aboutExercise: 'About this exercise',
+  musclesWorked: 'Muscles worked',
 };
 
 type Dict = typeof en;
@@ -238,6 +240,8 @@ const hr: Dict = {
   primaryMuscles: 'Glavni mišići',
   secondaryMuscles: 'Pomoćni mišići',
   step: 'Korak',
+  aboutExercise: 'O vježbi',
+  musclesWorked: 'Mišići koje vježba radi',
 };
 
 const muscleNames: Record<Muscle, [en: string, hr: string]> = {

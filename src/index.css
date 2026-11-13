@@ -164,7 +164,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 
 /* Sheet (exercise picker) */
 .sheet-backdrop {
-  position: fixed; inset: 0; z-index: 10;
+  position: fixed; inset: 0; z-index: 30;
   background: rgb(0 0 0 / 0.45);
   display: flex; align-items: flex-end; justify-content: center;
 }
@@ -240,6 +240,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 
 /* Exercise info + animation */
 .info-btn {
+  font-family: Georgia, serif; font-style: italic;
   width: 26px; height: 26px; border-radius: 999px; flex: none;
   border: 1.5px solid var(--border); color: var(--muted); font-weight: 700; font-size: 14px;
 }
@@ -355,3 +356,9 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .focus-done { align-items: center; text-align: center; padding-top: 40px; }
 .focus-done-icon { width: 84px; height: 84px; border-radius: 999px; display: grid; place-items: center; font-size: 44px; background: var(--accent); color: var(--accent-text); }
 .focus-done h2 { margin: 0; font-size: 26px; }
+
+.info-btn.big { width: 32px; height: 32px; font-size: 17px; }
+.focus-name-row { display: flex; align-items: center; gap: 10px; }
+.focus-name-row h2 { flex: 1; }
+.info-section .group-title { margin: 4px 0 8px; }
+.sheet { overflow-y: auto; }

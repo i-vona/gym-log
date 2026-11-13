@@ -18,7 +18,12 @@ export function ExerciseInfo({ exercise, onClose }: { exercise: Exercise; onClos
           <button className="icon-btn small" aria-label={t.close} onClick={onClose}>×</button>
         </header>
         {move ? <ExerciseAnim move={move} targets={targets} label={t.howTo} /> : <p className="hint">{t.noAnim}</p>}
-        <MuscleChips targets={targets} />
+        {targets && (
+          <section className="info-section">
+            <h3 className="group-title">{t.musclesWorked}</h3>
+            <MuscleChips targets={targets} />
+          </section>
+        )}
         <VideoLink exercise={exercise} />
       </div>
     </div>
