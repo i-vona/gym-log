@@ -479,11 +479,29 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   bandLateralWalk: {
+    // Seen from the front in a half squat with a mini band above the knees: the leading foot
+    // steps out to the side against the band, the other follows without letting the feet meet.
+    // Three steps one way; played backwards it walks back the other way.
     props: [{ k: 'band', a: 'knee', b: 'knee2' }],
-    frames: [
-      { view: 'back', t: 90, ik: [8, -38, 1], th: -97, sh: -84, at: ['ground', 100] },
-      { view: 'back', t: 90, ik: [8, -38, 1], th: -72, sh: -84, at: ['ground', 100] },
-    ],
+    ms: 420,
+    frames: (() => {
+      const hy = A - 69;
+      // [left foot x, right foot x, which foot is in the air]
+      const steps: [number, number, 'L' | 'R' | null][] = [
+        [52, 86, null], [52, 95, 'R'], [52, 104, null], [61, 104, 'L'], [70, 104, null],
+        [70, 113, 'R'], [70, 122, null], [79, 122, 'L'], [88, 122, null],
+        [88, 131, 'R'], [88, 140, null], [97, 140, 'L'], [106, 140, null],
+      ];
+      return steps.map(([l, r, up]): Pose => {
+        const hx = (l + r) / 2;
+        return {
+          view: 'front', t: 90, h: 0, ik: [0, -34, -1],
+          ikL: [r - hx, A - hy - (up === 'R' ? 9 : 0), -1],
+          ikL2: [l - hx, A - hy - (up === 'L' ? 9 : 0), 1],
+          at: ['hip', hx, hy],
+        };
+      });
+    })(),
   },
   kbSwing: {
     props: [{ k: 'kb', at: 'hand' }],
@@ -511,16 +529,21 @@ export const MOVES: Record<string, Move> = {
     ], [72, 136], -1),
   },
   stepUp: {
-    props: [{ k: 'rect', x: 108, y: 160, w: 48, h: 22 }, { k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
-    frames: [
-      // Lead foot on the box, back foot flat on the floor, chest slightly forward.
-      { t: 80, th: -20, sh: -100, ikL2: [-8, 71.5, 1], at: ['ankle', 128, 157] },
-      // Driving up: lead leg almost straight, back foot lifted over the edge of the box.
-      { t: 86, th: -65, sh: -95, ikL2: [-4, 64, 1], at: ['ankle', 128, 157] },
-      // Standing tall on the box with both feet.
-      { t: 90, th: -90, sh: -90, ikL2: [-4, 74.5, 1], at: ['ankle', 128, 157] },
-    ],
+    props: [{ k: 'rect', x: 108, y: 156, w: 54, h: 26 }, { k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     ms: 900,
+    // The lead foot stays flat on the box. The back foot starts flat on the floor, lifts with the
+    // knee bending forwards, clears the edge and lands next to the lead foot.
+    frames: (() => {
+      const onBox = (p: Loose) => pin({ ...p, ft: 0 }, 'ankle', 128, 152);
+      const start = onBox({ t: 82, th: -10, sh: -100, ft2: 0 });
+      const drive = onBox({ t: 86, th: -60, sh: -95, ft2: -25 });
+      const top = onBox({ t: 90, th: -88, sh: -92, ft2: 0 });
+      return [
+        { ...start, ikL2: to(start, 92, A, -1) },
+        { ...drive, ikL2: to(drive, 106, 132, -1) },
+        { ...top, ikL2: to(top, 122, 152, -1) },
+      ];
+    })(),
   },
   sumoSquat: {
     props: [{ k: 'db', at: 'hand', hang: true }],
