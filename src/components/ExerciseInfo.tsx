@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Exercise } from '../db';
 import { useI18n } from '../i18n';
@@ -8,18 +8,24 @@ import { bestEntry, useExerciseFormat } from '../exerciseFormat';
 import { ExerciseAnim, MuscleChips } from './ExerciseAnim';
 import { recommendedRest, restCategory, REST_SOURCES } from '../rest';
 import { fmtClock } from '../timer';
+import { useBackClose } from '../useBack';
+import { metaOf } from '../generator';
+import { alternatives, userEquipment } from '../swap';
 
 const CROSSOVER_STUDY = 'https://pure.solent.ac.uk/en/publications/non-local-muscle-fatigue-effects-on-muscle-strength-power-and-end-2/';
 
 /** Full page about one exercise: animation, muscles, left/right advice, your results, video. */
 export function ExerciseInfo({ exercise, onClose, planRest }: { exercise: Exercise; onClose: () => void; planRest?: number }) {
-  const { t, exName, fmtDate } = useI18n();
+  const { t, exName, fmtDate, muscleName } = useI18n();
   const { describe } = useExerciseFormat();
+  const [other, setOther] = useState<Exercise | null>(null);
+  const meta = metaOf(exercise.key);
+  const alts = useLiveQuery(async () => alternatives(exercise, await db.exercises.toArray(), await userEquipment()), [exercise.id]);
   const move = exercise.key ? MOVES[exercise.key] : undefined;
   const targets = exercise.key ? MUSCLES[exercise.key] : undefined;
 
   const stats = useLiveQuery(async () => {
-    const all = await db.entries.where('exerciseId').equals(exercise.id!).sortBy('date');
+    const all = (await db.entries.where('exerciseId').equals(exercise.id!).sortBy('date')).filter((e) => !e.warmup);
     if (!all.length) return null;
     const lastDate = all[all.length - 1].date;
     return {
@@ -29,13 +35,7 @@ export function ExerciseInfo({ exercise, onClose, planRest }: { exercise: Exerci
     };
   }, [exercise.id]);
 
-  // Close with the phone's back gesture / browser back.
-  useEffect(() => {
-    history.pushState({ exercisePage: true }, '');
-    const onPop = () => onClose();
-    addEventListener('popstate', onPop);
-    return () => removeEventListener('popstate', onPop);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useBackClose(onClose);
   const close = () => history.back();
 
   return (
@@ -45,6 +45,7 @@ export function ExerciseInfo({ exercise, onClose, planRest }: { exercise: Exerci
         <h1>{exName(exercise)}</h1>
       </header>
       <main className="page-body">
+        {meta && <p className="ex-meta">{t[`libEquip_${meta.eq}`]} · {t[`level_${meta.lvl}`]}</p>}
         {move ? <ExerciseAnim move={move} targets={targets} label={t.howTo} big /> : <p className="hint">{t.noAnim}</p>}
 
         {targets && (
@@ -55,6 +56,20 @@ export function ExerciseInfo({ exercise, onClose, planRest }: { exercise: Exerci
         )}
 
         <RestCard exercise={exercise} planRest={planRest} />
+
+        {alts && alts.length > 0 && (
+          <section className="card">
+            <h2>{t.alternatives}</h2>
+            <div className="pick-list flat">
+              {alts.slice(0, 5).map((a) => (
+                <button key={a.ex.id} className="pick-item" onClick={() => setOther(a.ex)}>
+                  {exName(a.ex)}
+                  <span className="pick-sub muted">{a.sameMovement ? `${t.sameMovement} · ` : ''}{a.shared.map(muscleName).join(', ')}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {exercise.unilateral && (
           <section className="card">
@@ -81,6 +96,7 @@ export function ExerciseInfo({ exercise, onClose, planRest }: { exercise: Exerci
 
         <VideoLink exercise={exercise} />
       </main>
+      {other && <ExerciseInfo exercise={other} onClose={() => setOther(null)} />}
     </div>
   );
 }

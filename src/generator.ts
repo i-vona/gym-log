@@ -33,7 +33,7 @@ export function normalizeInput(raw: Partial<GenInput> & { equip?: unknown }): Ge
   return { ...DEFAULT_INPUT, ...raw, equip } as GenInput;
 }
 
-type Pattern =
+export type Pattern =
   | 'squat' | 'hinge' | 'lunge' | 'glute' | 'hamCurl' | 'quadIso' | 'calf'
   | 'pushH' | 'pushV' | 'pullV' | 'pullH' | 'fly' | 'lateral' | 'rearDelt' | 'biceps' | 'triceps'
   | 'coreFlex' | 'coreAntiExt' | 'coreRot' | 'carry' | 'conditioning' | 'cardio';
@@ -142,7 +142,12 @@ const TEMPLATES: Record<Exclude<Focus, 'cardio'>, Pattern[]> = {
   core: ['coreFlex', 'coreAntiExt', 'coreRot', 'carry', 'coreAntiExt', 'coreRot', 'coreFlex'],
 };
 
-const has = (input: GenInput, eq: Equip) => eq === 'none' || input.equip.includes('gym') || input.equip.includes(eq);
+/** True if the equipment an exercise needs is available. */
+export const hasEquip = (equip: Equip[], eq: Equip) => eq === 'none' || equip.includes('gym') || equip.includes(eq);
+const has = (input: GenInput, eq: Equip) => hasEquip(input.equip, eq);
+
+/** Movement pattern, equipment and difficulty of a built-in exercise. */
+export const metaOf = (key: string | undefined) => (key ? META[key] : undefined);
 
 type Rx = [sets: number, target: string, unit?: PlanItem['unit']];
 const RX: Record<Goal, Record<Exclude<RestCategory, 'cardio'>, Rx>> = {
@@ -270,11 +275,11 @@ export function recovering(recent: Recent): { muscle: Muscle; ago: number; left:
 }
 
 export const AREA_MUSCLES: Record<Exclude<Focus, 'cardio'>, Muscle[]> = {
-  full: ['chest', 'shoulders', 'rearDelts', 'triceps', 'biceps', 'lats', 'upperBack', 'lowerBack', 'abs', 'obliques', 'glutes', 'quads', 'hamstrings', 'calves'],
-  upper: ['chest', 'shoulders', 'rearDelts', 'triceps', 'biceps', 'lats', 'upperBack', 'forearms'],
-  lower: ['quads', 'hamstrings', 'glutes', 'calves', 'hipFlexors'],
-  back: ['lats', 'upperBack', 'rearDelts', 'biceps', 'lowerBack'],
-  push: ['chest', 'shoulders', 'triceps'],
+  full: ['chest', 'frontDelts', 'sideDelts', 'rearDelts', 'triceps', 'biceps', 'lats', 'upperBack', 'lowerBack', 'abs', 'obliques', 'glutes', 'quads', 'hamstrings', 'calves'],
+  upper: ['chest', 'frontDelts', 'sideDelts', 'rearDelts', 'triceps', 'biceps', 'lats', 'upperBack', 'forearms'],
+  lower: ['quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'hipFlexors'],
+  back: ['lats', 'upperBack', 'traps', 'rearDelts', 'biceps', 'lowerBack'],
+  push: ['chest', 'frontDelts', 'sideDelts', 'triceps'],
   arms: ['biceps', 'triceps', 'forearms'],
   core: ['abs', 'obliques', 'lowerBack'],
 };

@@ -4,6 +4,7 @@ import { db, e1rm, type Entry } from '../db';
 import { useI18n } from '../i18n';
 import { useExerciseFormat } from '../exerciseFormat';
 import { Chart, type Point } from '../components/Chart';
+import { MusclesView } from './MusclesView';
 
 type Metric = 'topWeight' | 'est1rm' | 'volume' | 'maxReps' | 'distance' | 'time' | 'pace'
   | 'longestHold' | 'carryDistance' | 'assistance';
@@ -17,10 +18,31 @@ function fmtPace(minPerKm: number) {
 const sum = (es: Entry[], f: (e: Entry) => number) => es.reduce((s, e) => s + f(e), 0);
 const maxBy = (es: Entry[], f: (e: Entry) => number) => es.reduce((b, e) => (f(e) > f(b) ? e : b));
 
+/** Progress tab: muscle analytics, or progress for one exercise. */
 export function ProgressView() {
+  const { t } = useI18n();
+  const [mode, setMode] = useState<'muscles' | 'exercises'>(() => {
+    try { return localStorage.getItem('progressMode') === 'exercises' ? 'exercises' : 'muscles'; } catch { return 'muscles'; }
+  });
+  const pick = (m: 'muscles' | 'exercises') => {
+    setMode(m);
+    try { localStorage.setItem('progressMode', m); } catch { /* ignore */ }
+  };
+  return (
+    <div className="view">
+      <div className="seg seg-top">
+        <button className={mode === 'muscles' ? 'on' : ''} onClick={() => pick('muscles')}>{t.muscles}</button>
+        <button className={mode === 'exercises' ? 'on' : ''} onClick={() => pick('exercises')}>{t.exercisesTab}</button>
+      </div>
+      {mode === 'muscles' ? <MusclesView /> : <ExerciseProgress />}
+    </div>
+  );
+}
+
+function ExerciseProgress() {
   const { t, exName, fmtDate, fmtNum } = useI18n();
   const { describe } = useExerciseFormat();
-  const entries = useLiveQuery(() => db.entries.orderBy('date').toArray());
+  const entries = useLiveQuery(() => db.entries.orderBy('date').filter((e) => !e.warmup).toArray());
   const exercises = useLiveQuery(() => db.exercises.toArray());
 
   // Exercises with data, most recently logged first.

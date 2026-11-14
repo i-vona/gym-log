@@ -53,7 +53,7 @@ export function HistoryView({ openDay }: { openDay: (date: string) => void }) {
                   const km = es.reduce((s, e) => s + (e.distance ?? 0), 0);
                   summary = [min && `${fmtNum(min)} min`, km && `${fmtNum(km, 2)} km`].filter(Boolean).join(' · ');
                 } else {
-                  summary = `${t.sets}: ${ex ? setCount(es, ex) : es.length} · ${t.best} ${describe(bestEntry(es, ex), ex)}`;
+                  summary = `${t.sets}: ${ex ? setCount(es, ex) : es.length} · ${t.best} ${describe(bestEntry(es.some((e) => !e.warmup) ? es.filter((e) => !e.warmup) : es, ex), ex)}`;
                 }
                 return (
                   <li key={id}><span>{exName(ex)}</span><span className="muted">{summary}</span></li>

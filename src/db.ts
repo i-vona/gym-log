@@ -34,6 +34,8 @@ export interface Entry {
   meters?: number;
   /** Left or right, for one-sided exercises. */
   side?: 'L' | 'R';
+  /** Warm-up set: shown in the log but left out of set counts, records and muscle analytics. */
+  warmup?: boolean;
   createdAt: number;
 }
 
@@ -88,6 +90,8 @@ export interface Day {
   date: string;
   planId?: number;
   done?: string[];
+  /** Exercises swapped for today only (equipment busy), keyed by 'section-item' index. */
+  swaps?: Record<string, { ex?: string; exId?: number }>;
 }
 
 export const BUILTIN_EXERCISES: { key: string; type: ExerciseType; assisted?: boolean; unilateral?: boolean; bodyweight?: boolean }[] = [

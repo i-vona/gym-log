@@ -1,4 +1,4 @@
-// Stick-figure engine for exercise animations. Pure geometry, no DOM, so it can be
+// Figure engine for exercise animations. Pure geometry, no DOM, so it can be
 // rendered by React (SVG) and by a Node script (for checking the drawings).
 //
 // Angles are absolute, in degrees: 0 = right (the way the figure faces), 90 = up,
@@ -61,12 +61,6 @@ export interface Move {
   vb?: [number, number, number, number];
 }
 
-export type Cls = 'body' | 'bodyFar' | 'm1' | 'm2' | 'heart' | 'prop' | 'band' | 'scene' | 'water';
-export type Prim =
-  | { k: 'l'; a: V; b: V; w: number; c: Cls }
-  | { k: 'c'; c: V; r: number; fill: boolean; w: number; cl: Cls; dim?: boolean }
-  | { k: 'p'; pts: V[]; cl: Cls; edge?: boolean; dim?: boolean }
-  | { k: 'r'; x: number; y: number; w: number; h: number; cl: Cls };
 
 export const VIEW = { w: 200, h: 190 };
 export const GROUND = 182;
@@ -203,126 +197,354 @@ export function poseAt(m: Move, ms: number): Pose {
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: a body with volume (tapered limbs, shaped torso) plus muscle highlights.
+// Drawing: an anatomical figure. Every body part has a contoured outline (skin) with
+// individual muscles drawn on top; worked muscles are coloured, the rest stay neutral.
 
 export type Muscle =
-  | 'chest' | 'shoulders' | 'rearDelts' | 'triceps' | 'biceps' | 'forearms'
-  | 'lats' | 'upperBack' | 'lowerBack' | 'abs' | 'obliques'
-  | 'glutes' | 'quads' | 'hamstrings' | 'hipFlexors' | 'calves' | 'cardio';
+  | 'chest' | 'frontDelts' | 'sideDelts' | 'rearDelts' | 'biceps' | 'triceps' | 'forearms'
+  | 'traps' | 'upperBack' | 'lats' | 'lowerBack' | 'abs' | 'obliques'
+  | 'glutes' | 'hipFlexors' | 'quads' | 'adductors' | 'hamstrings' | 'calves' | 'cardio';
 
 /** Primary (p) and secondary (s) muscles an exercise works. */
 export interface Targets { p: Muscle[]; s: Muscle[] }
 
-type Belly = [from: number, to: number, side: number, offset: number, width: number];
+export type Cls = 'skin' | 'mu' | 'm1' | 'm2' | 'h1' | 'h2' | 'h3' | 'h4' | 'sel' | 'line' | 'heart' | 'prop' | 'band' | 'scene' | 'water';
+export type Prim =
+  | { k: 'l'; a: V; b: V; w: number; c: Cls }
+  | { k: 'pl'; pts: V[]; w: number; c: Cls; dim?: boolean }
+  | { k: 'c'; c: V; r: number; fill: boolean; w: number; cl: Cls; dim?: boolean }
+  | { k: 'p'; pts: V[]; cl: Cls; dim?: boolean; mu?: Muscle }
+  | { k: 'r'; x: number; y: number; w: number; h: number; cl: Cls };
 
-// Where each muscle sits on a body segment: fraction along the segment, which side
-// (+1 front, -1 back, 0 middle), how far from the centre line, and half-width.
-const TORSO: Partial<Record<Muscle, Belly>> = {
-  chest: [0.56, 0.93, 1, 5, 5],
-  abs: [0.1, 0.55, 1, 5, 4.5],
-  obliques: [0.12, 0.55, 0, 0, 4],
-  lats: [0.4, 0.85, -1, 4.5, 5],
-  upperBack: [0.72, 1.0, -1, 4.5, 5],
-  lowerBack: [0.04, 0.4, -1, 5, 4],
-  glutes: [-0.1, 0.18, -1, 5.5, 7],
-};
-const UPPER_ARM: Partial<Record<Muscle, Belly>> = {
-  biceps: [0.25, 0.85, 1, 2, 3.2],
-  triceps: [0.25, 0.85, -1, 2, 3.4],
-  shoulders: [-0.05, 0.32, 0, 0, 6.2],
-  rearDelts: [-0.05, 0.32, -1, 1.5, 5.6],
-};
-const FOREARM: Partial<Record<Muscle, Belly>> = { forearms: [0.05, 0.65, 0, 0, 3.4] };
-const THIGH: Partial<Record<Muscle, Belly>> = {
-  quads: [0.15, 0.88, 1, 2.6, 5],
-  hamstrings: [0.15, 0.85, -1, 2.6, 4.6],
-  hipFlexors: [0, 0.3, 1, 3, 3.6],
-};
-const SHIN: Partial<Record<Muscle, Belly>> = { calves: [0.08, 0.6, -1, 2, 4] };
+/** Half-widths along a body part: [position along it, width on the + side, width on the − side]. */
+type Prof = [t: number, plus: number, minus: number][];
 
-function capsule(a: V, b: V, r1: number, r2: number): V[] {
-  const base = Math.atan2(b[1] - a[1], b[0] - a[0]);
-  const pts: V[] = [];
-  for (let i = 0; i <= 8; i++) {
-    const t = base - Math.PI / 2 + (Math.PI * i) / 8;
-    pts.push([b[0] + Math.cos(t) * r2, b[1] + Math.sin(t) * r2]);
+/**
+ * A body part between two joints. `n` points to the "+" side of the lanes: the front of the
+ * body in side view, the inner (medial) side of a limb seen from the front or back.
+ */
+interface Seg { a: V; d: V; n: V; len: number; prof: Prof }
+
+/** A muscle on a body part: from/to along it, and the lanes it spans (−1 … 1 of the local width). */
+type Mu = [key: Muscle | null, t0: number, t1: number, lo: number, hi: number];
+/** A definition line: along the part at a lane (from t0 to t1), or across it at t (lanes lo…hi). */
+type Ln = ['along', t0: number, t1: number, lane: number] | ['across', t: number, lo: number, hi: number];
+
+interface Part { prof: Prof; mus: Mu[]; lines?: Ln[] }
+
+const smooth = (u: number) => u * u * (3 - 2 * u);
+
+function widthAt(prof: Prof, t: number): [number, number] {
+  if (t <= prof[0][0]) return [prof[0][1], prof[0][2]];
+  for (let i = 1; i < prof.length; i++) {
+    const [t1, p1, m1] = prof[i];
+    const [t0, p0, m0] = prof[i - 1];
+    if (t <= t1) {
+      const u = smooth((t - t0) / (t1 - t0 || 1));
+      return [p0 + (p1 - p0) * u, m0 + (m1 - m0) * u];
+    }
   }
-  for (let i = 0; i <= 8; i++) {
-    const t = base + Math.PI / 2 + (Math.PI * i) / 8;
-    pts.push([a[0] + Math.cos(t) * r1, a[1] + Math.sin(t) * r1]);
-  }
-  return pts;
+  const l = prof[prof.length - 1];
+  return [l[1], l[2]];
 }
 
-function ellipse(c: V, angle: number, rx: number, ry: number): V[] {
-  const pts: V[] = [];
-  for (let i = 0; i < 16; i++) {
-    const t = (i / 16) * Math.PI * 2;
-    const x = Math.cos(t) * rx;
-    const y = Math.sin(t) * ry;
-    pts.push([c[0] + x * Math.cos(angle) - y * Math.sin(angle), c[1] + x * Math.sin(angle) + y * Math.cos(angle)]);
-  }
-  return pts;
-}
+const at = (s: Seg, t: number, off: number): V => [
+  s.a[0] + s.d[0] * t * s.len + s.n[0] * off,
+  s.a[1] + s.d[1] * t * s.len + s.n[1] * off,
+];
+const laneOff = (s: Seg, t: number, lane: number) => {
+  const [p, m] = widthAt(s.prof, t);
+  return lane >= 0 ? lane * p : lane * m;
+};
 
-/** Unit vector along a→b and the normal pointing to the segment's front (anterior) side. */
-function frame(a: V, b: V, limb: boolean) {
+function seg(a: V, b: V, prof: Prof, nSign: 1 | -1, scale = 1): Seg {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
-  const len = Math.hypot(dx, dy) || 1;
+  const len = Math.hypot(dx, dy) || 0.001;
   const d: V = [dx / len, dy / len];
-  // Limbs hang down with their front facing forward; the torso points up.
-  const n: V = limb ? [d[1], -d[0]] : [-d[1], d[0]];
-  return { d, n, len, angle: Math.atan2(dy, dx) };
+  return { a, d, n: [d[1] * nSign, -d[0] * nSign], len, prof: scale === 1 ? prof : prof.map(([t, p, m]) => [t, p * scale, m * scale]) };
 }
 
-export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
+/** Outline of a body part with rounded ends. */
+function outline(s: Seg, scale = 1): V[] {
+  const p = s.prof;
+  const t0 = p[0][0];
+  const t1 = p[p.length - 1][0];
+  const N = 16;
+  const plus: V[] = [];
+  const minus: V[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = t0 + ((t1 - t0) * i) / N;
+    const [wp, wm] = widthAt(p, t);
+    plus.push(at(s, t, wp * scale));
+    minus.push(at(s, t, -wm * scale));
+  }
+  const cap = (t: number, from: number, to: number): V[] => {
+    const [wp, wm] = widthAt(p, t);
+    const c = at(s, t, ((wp - wm) / 2) * scale);
+    const r = ((wp + wm) / 2) * scale;
+    const pts: V[] = [];
+    for (let i = 1; i < 8; i++) {
+      const th = from + ((to - from) * i) / 8;
+      pts.push([
+        c[0] + r * (s.n[0] * Math.cos(th) + s.d[0] * Math.sin(th) * 0.8),
+        c[1] + r * (s.n[1] * Math.cos(th) + s.d[1] * Math.sin(th) * 0.8),
+      ]);
+    }
+    return pts;
+  };
+  return [...plus, ...cap(t1, 0, Math.PI), ...minus.reverse(), ...cap(t0, Math.PI, 2 * Math.PI)];
+}
+
+/** A muscle belly: a lens between two lanes that narrows towards both ends. */
+function belly(s: Seg, t0: number, t1: number, lo: number, hi: number): V[] {
+  const N = 14;
+  const a: V[] = [];
+  const b: V[] = [];
+  const c = (lo + hi) / 2;
+  const h = (hi - lo) / 2;
+  for (let i = 0; i <= N; i++) {
+    const u = i / N;
+    const t = t0 + (t1 - t0) * u;
+    const k = Math.pow(Math.sin(Math.PI * u), 0.32);
+    a.push(at(s, t, laneOff(s, t, c + h * k)));
+    b.push(at(s, t, laneOff(s, t, c - h * k)));
+  }
+  return [...a, ...b.reverse()];
+}
+
+/** Limbs are drawn a little fuller than the profiles below. */
+const LIMB = 1.2;
+
+// ----- Body parts -----------------------------------------------------------------
+// Side view: + = front of the body. Front/back view: limbs + = inner side; torso symmetric.
+
+const SIDE = {
+  thigh: {
+    prof: [[-0.06, 8, 8.6], [0.25, 8.3, 8], [0.62, 7, 6.2], [0.9, 5.7, 5.3], [1.02, 5.3, 5]],
+    mus: [
+      ['adductors', 0.04, 0.55, -0.24, 0.04],
+      ['hamstrings', 0.1, 0.93, -0.95, -0.18],
+      ['quads', 0.1, 0.97, -0.1, 0.95],
+      ['hipFlexors', -0.04, 0.26, 0.12, 0.88],
+    ],
+    lines: [['along', 0.24, 0.84, 0.45]],
+  },
+  shin: {
+    prof: [[0, 5.2, 5.1], [0.2, 4.7, 6.8], [0.42, 4.2, 6.1], [0.72, 3.4, 3.6], [1, 2.9, 2.9]],
+    mus: [
+      [null, 0.06, 0.8, 0.05, 0.9],
+      ['calves', 0.35, 0.86, -0.82, -0.08],
+      ['calves', 0.03, 0.6, -0.97, -0.06],
+    ],
+  },
+  upperArm: {
+    prof: [[-0.1, 6.6, 6.6], [0.2, 6.1, 6.3], [0.5, 4.7, 5.1], [0.85, 3.9, 4.1], [1, 3.7, 3.7]],
+    mus: [
+      ['triceps', 0.24, 0.96, -0.95, -0.04],
+      ['biceps', 0.3, 0.9, 0.02, 0.95],
+      ['sideDelts', -0.16, 0.46, -0.44, 0.44],
+      ['rearDelts', -0.13, 0.42, -0.98, -0.3],
+      ['frontDelts', -0.13, 0.42, 0.3, 0.98],
+    ],
+  },
+  forearm: {
+    prof: [[0, 3.8, 3.8], [0.22, 4.5, 4.1], [0.6, 3.3, 3], [1, 2.4, 2.4]],
+    mus: [
+      ['forearms', 0.03, 0.8, -0.92, 0],
+      ['forearms', 0.03, 0.8, 0, 0.92],
+    ],
+  },
+  torso: {
+    prof: [[-0.17, 5, 6], [-0.05, 7.5, 10], [0.1, 8, 10.6], [0.26, 7.6, 8], [0.42, 7.2, 6.6], [0.6, 8.2, 7.6], [0.78, 10.2, 8.6], [0.92, 9.2, 8.2], [1.04, 6.2, 6.6], [1.12, 4, 4.6]],
+    mus: [
+      ['lowerBack', 0.1, 0.52, -0.95, -0.5],
+      ['obliques', 0.08, 0.62, -0.38, 0.5],
+      [null, 0.56, 0.78, -0.05, 0.55],
+      ['lats', 0.34, 0.86, -0.95, -0.1],
+      ['upperBack', 0.7, 1.02, -0.96, -0.44],
+      ['abs', 0.04, 0.66, 0.5, 0.98],
+      ['chest', 0.63, 0.98, 0.06, 0.98],
+      ['traps', 0.86, 1.14, -0.72, 0.12],
+    ],
+    lines: [['across', 0.2, 0.56, 0.96], ['across', 0.34, 0.56, 0.96], ['across', 0.48, 0.56, 0.96]],
+  },
+  glutes: { prof: [], mus: [['glutes', -0.17, 0.25, -1, -0.16]] },
+} satisfies Record<string, Part>;
+
+const FRONT = {
+  thigh: {
+    prof: [[-0.06, 7.4, 8.6], [0.3, 7.2, 8.6], [0.7, 5.6, 6.6], [1, 4.8, 5.1]],
+    mus: [
+      ['adductors', 0.02, 0.56, 0.32, 0.98],
+      ['quads', 0.1, 0.95, -0.96, 0.42],
+      ['quads', 0.66, 0.96, 0.2, 0.86],
+      ['hipFlexors', -0.04, 0.24, -0.62, 0.3],
+    ],
+    lines: [['along', 0.2, 0.78, -0.35]],
+  },
+  shin: {
+    prof: [[0, 4.8, 4.9], [0.25, 5.6, 5.1], [0.55, 4, 4.1], [1, 2.6, 2.7]],
+    mus: [
+      [null, 0.06, 0.78, -0.88, 0.12],
+      ['calves', 0.05, 0.56, 0.18, 0.98],
+    ],
+  },
+  upperArm: {
+    prof: [[-0.12, 5, 7.2], [0.2, 4.6, 6.8], [0.55, 4.4, 4.7], [1, 3.6, 3.7]],
+    mus: [
+      ['biceps', 0.3, 0.92, -0.62, 0.78],
+      ['sideDelts', -0.18, 0.46, -0.98, -0.1],
+      ['frontDelts', -0.15, 0.42, -0.22, 0.86],
+    ],
+  },
+  forearm: {
+    prof: [[0, 3.7, 4], [0.25, 4.1, 4.7], [1, 2.4, 2.4]],
+    mus: [['forearms', 0.03, 0.8, -0.92, 0.92]],
+    lines: [['along', 0.12, 0.7, 0.05]],
+  },
+  torso: {
+    prof: [[-0.1, 8, 8], [0.02, 11.6, 11.6], [0.18, 12, 12], [0.42, 11, 11], [0.62, 12.4, 12.4], [0.8, 14.6, 14.6], [0.95, 15.2, 15.2], [1.05, 11.5, 11.5], [1.15, 4.6, 4.6]],
+    mus: [
+      [null, 0.56, 0.74, 0.58, 0.95],
+      [null, 0.56, 0.74, -0.95, -0.58],
+      ['obliques', 0.02, 0.62, 0.4, 0.95],
+      ['obliques', 0.02, 0.62, -0.95, -0.4],
+      ['abs', -0.06, 0.66, 0.02, 0.37],
+      ['abs', -0.06, 0.66, -0.37, -0.02],
+      ['chest', 0.64, 0.99, 0.03, 0.88],
+      ['chest', 0.64, 0.99, -0.88, -0.03],
+      ['traps', 0.97, 1.17, 0.2, 0.76],
+      ['traps', 0.97, 1.17, -0.76, -0.2],
+    ],
+    lines: [['across', 0.2, -0.36, 0.36], ['across', 0.34, -0.36, 0.36], ['across', 0.48, -0.36, 0.36]],
+  },
+} satisfies Record<string, Part>;
+
+const BACK = {
+  thigh: {
+    prof: FRONT.thigh.prof,
+    mus: [
+      ['adductors', 0.02, 0.5, 0.42, 0.98],
+      ['hamstrings', 0.1, 0.93, -0.94, -0.18],
+      ['hamstrings', 0.1, 0.93, -0.24, 0.52],
+    ],
+  },
+  shin: {
+    prof: [[0, 4.9, 4.9], [0.25, 5.6, 5.6], [0.55, 4.2, 4.2], [1, 2.7, 2.7]],
+    mus: [
+      ['calves', 0.38, 0.86, -0.82, 0.82],
+      ['calves', 0.03, 0.6, -0.98, 0],
+      ['calves', 0.03, 0.64, 0, 0.98],
+    ],
+  },
+  upperArm: {
+    prof: FRONT.upperArm.prof,
+    mus: [
+      ['triceps', 0.26, 0.95, -0.86, 0.8],
+      ['sideDelts', -0.18, 0.46, -0.98, -0.1],
+      ['rearDelts', -0.15, 0.42, -0.22, 0.9],
+    ],
+    lines: [['along', 0.45, 0.9, 0.0]],
+  },
+  forearm: FRONT.forearm,
+  torso: {
+    prof: [[-0.2, 9, 9], [-0.05, 13, 13], [0.18, 12.4, 12.4], [0.42, 11, 11], [0.62, 12.6, 12.6], [0.8, 14.6, 14.6], [0.95, 15.2, 15.2], [1.05, 11.5, 11.5], [1.15, 4.6, 4.6]],
+    mus: [
+      ['obliques', 0.12, 0.46, 0.7, 0.98],
+      ['obliques', 0.12, 0.46, -0.98, -0.7],
+      ['lowerBack', 0.06, 0.52, 0.04, 0.36],
+      ['lowerBack', 0.06, 0.52, -0.36, -0.04],
+      ['lats', 0.28, 0.8, 0.24, 0.98],
+      ['lats', 0.28, 0.8, -0.98, -0.24],
+      ['upperBack', 0.64, 0.94, 0.26, 0.86],
+      ['upperBack', 0.64, 0.94, -0.86, -0.26],
+      ['traps', 0.52, 1.17, -0.56, 0.56],
+      ['glutes', -0.2, 0.2, 0.02, 0.98],
+      ['glutes', -0.2, 0.2, -0.98, -0.02],
+    ],
+  },
+} satisfies Record<string, Part>;
+
+/** Draws a pose. Muscles are coloured by `paint` if given, else by the exercise targets. */
+export function draw(m: Move, p: Pose, tg?: Targets, paint?: (mu: Muscle) => Cls): Prim[] {
   const j = anchored(p);
   const out: Prim[] = [];
-  const front = p.view === 'front' || p.view === 'back';
+  const view = p.view ?? 'side';
+  const front = view !== 'side';
+  const B = view === 'side' ? SIDE : view === 'front' ? FRONT : BACK;
   const [vx, , vw] = m.vb ?? [0, 0, VIEW.w, VIEW.h];
   const line = (a: V, b: V, w: number, c: Cls) => out.push({ k: 'l', a, b, w, c });
-  const poly = (pts: V[], cl: Cls, edge = false, dim = false) => out.push({ k: 'p', pts, cl, edge, dim });
-  const level = (mu: Muscle): Cls | null => (tg?.p.includes(mu) ? 'm1' : tg?.s.includes(mu) ? 'm2' : null);
+  const poly = (pts: V[], cl: Cls, dim = false, mu?: Muscle) => out.push({ k: 'p', pts, cl, dim, mu });
+  const level = (mu: Muscle | null): Cls => (!mu ? 'mu' : paint ? paint(mu) : tg?.p.includes(mu) ? 'm1' : tg?.s.includes(mu) ? 'm2' : 'mu');
 
-  /** Muscle bellies on one segment. */
-  const muscles = (a: V, b: V, table: Partial<Record<Muscle, Belly>>, limb: boolean, dim: boolean) => {
-    const f = frame(a, b, limb);
-    for (const mu of Object.keys(table) as Muscle[]) {
-      const cl = level(mu);
-      if (!cl) continue;
-      const [f0, f1, side, off, w] = table[mu]!;
-      // Facing the viewer only front muscles show; from behind only back ones.
-      if (front && (p.view === 'back' ? side > 0 || mu === 'chest' : side < 0)) continue;
-      const along = ((f0 + f1) / 2) * f.len;
-      const o = front ? 0 : side * off;
-      if (p.view === 'back' && mu === 'obliques') continue;
-      const base: V = [a[0] + f.d[0] * along + f.n[0] * o, a[1] + f.d[1] * along + f.n[1] * o];
-      const centres: V[] = [];
-      if (front && !limb && (mu === 'chest' || mu === 'obliques' || mu === 'lats' || mu === 'glutes')) {
-        const s = mu === 'chest' || mu === 'glutes' ? 6.5 : mu === 'lats' ? 9 : 10;
-        centres.push([base[0] + f.n[0] * s, base[1] + f.n[1] * s], [base[0] - f.n[0] * s, base[1] - f.n[1] * s]);
-      } else centres.push(base);
-      const rx = Math.max(3, ((f1 - f0) * f.len) / 2);
-      for (const c of centres) poly(ellipse(c, f.angle, rx, front && mu === 'chest' ? 5.5 : w), cl, false, dim);
+  const muscles = (s: Seg, part: Part, dim: boolean) => {
+    for (const [key, t0, t1, lo, hi] of part.mus) poly(belly(s, t0, t1, lo, hi), level(key), dim, key ?? undefined);
+    for (const ln of part.lines ?? []) {
+      const pts: V[] = [];
+      for (let i = 0; i <= 6; i++) {
+        const u = i / 6;
+        if (ln[0] === 'along') {
+          const t = ln[1] + (ln[2] - ln[1]) * u;
+          pts.push(at(s, t, laneOff(s, t, ln[3])));
+        } else {
+          const lane = ln[2] + (ln[3] - ln[2]) * u;
+          pts.push(at(s, ln[1], laneOff(s, ln[1], lane)));
+        }
+      }
+      out.push({ k: 'pl', pts, w: 0.6, c: 'line', dim });
     }
   };
 
-  const body = (dim: boolean): Cls => (dim ? 'bodyFar' : 'body');
+  /** A body part: skin outline, then its muscles. */
+  const part = (a: V, b: V, pt: Part, nSign: 1 | -1, dim: boolean) => {
+    const s = seg(a, b, pt.prof, nSign, LIMB);
+    poly(outline(s), 'skin', dim);
+    muscles(s, pt, dim);
+    return s;
+  };
+
+  /** Hands, feet and head: skin outline with a lighter fill inside. */
+  const blob = (s: Seg, dim: boolean) => {
+    poly(outline(s), 'skin', dim);
+    poly(outline(s, 0.72), 'mu', dim);
+  };
+
+  // In side view + is the front of the limb; facing the viewer (or from behind) + is the
+  // inner side, which depends on which side of the body the limb is on.
+  const across = vec(p.t - 90, 1);
+  const sideOf = (root: V, centre: V): 1 | -1 => ((root[0] - centre[0]) * across[0] + (root[1] - centre[1]) * across[1] >= 0 ? 1 : -1);
+  const limbSign = (root: V, centre: V): 1 | -1 => (front ? (-sideOf(root, centre) as 1 | -1) : 1);
+
+  const foot = (ankle: V, toe: V, knee: V, dim: boolean) => {
+    const s0 = seg(ankle, toe, [[-0.32, 2.6, 2.2], [0, 3.3, 2.7], [0.55, 2.2, 2.4], [1, 1.5, 1.9]], 1);
+    // + must point up the leg (away from the sole).
+    if (s0.n[0] * (knee[0] - ankle[0]) + s0.n[1] * (knee[1] - ankle[1]) < 0) s0.n = [-s0.n[0], -s0.n[1]];
+    if (front) s0.prof = [[-0.2, 2.6, 2.6], [0.4, 3.2, 3], [1, 2.2, 2.2]];
+    blob(s0, dim);
+  };
+  const hand = (wrist: V, dir: V, dim: boolean) => {
+    const tip: V = [wrist[0] + dir[0] * 7, wrist[1] + dir[1] * 7];
+    blob(seg(wrist, tip, [[-0.05, 2.6, 2.6], [0.45, 3.3, 3.1], [0.9, 2.4, 2.4]], 1), dim);
+  };
+  const unit = (a: V, b: V): V => { const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; };
 
   const leg = (hip: V, knee: V, ankle: V, toe: V, dim: boolean) => {
-    poly(capsule(hip, knee, 8, 6), body(dim), true, dim);
-    muscles(hip, knee, THIGH, true, dim);
-    poly(capsule(knee, ankle, 6, 4.2), body(dim), true, dim);
-    muscles(knee, ankle, SHIN, true, dim);
-    poly(capsule(ankle, toe, 3.8, 2.8), body(dim), true, dim);
+    const sg = limbSign(hip, j.hip);
+    foot(ankle, toe, knee, dim);
+    part(knee, ankle, B.shin, sg, dim);
+    const th = part(hip, knee, B.thigh, sg, dim);
+    // Kneecap (front and side views).
+    if (view !== 'back') {
+      const kc = view === 'side' ? at(th, 0.98, 4.2) : at(th, 0.96, laneOff(th, 0.96, 0.1));
+      out.push({ k: 'c', c: kc, r: 2.4, fill: true, w: 0, cl: 'mu', dim });
+    }
   };
-  const arm = (sh: V, el: V, hand: V, dim: boolean) => {
-    poly(capsule(sh, el, 5.6, 4.4), body(dim), true, dim);
-    muscles(sh, el, UPPER_ARM, true, dim);
-    poly(capsule(el, hand, 4.4, 3.4), body(dim), true, dim);
-    muscles(el, hand, FOREARM, true, dim);
-    out.push({ k: 'c', c: hand, r: 4, fill: true, w: 0, cl: body(dim), dim });
+  const arm = (sh: V, el: V, hd: V, dim: boolean) => {
+    const sg = limbSign(sh, j.neck);
+    hand(hd, unit(el, hd), dim);
+    part(el, hd, B.forearm, sg, dim);
+    part(sh, el, B.upperArm, sg, dim);
   };
 
   const propPrims = (pr: Prop) => {
@@ -333,12 +555,15 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
           line([c[0] - 8, c[1]], [c[0] + 8, c[1]], 3, 'prop');
           line([c[0] - 9, c[1] - 6], [c[0] - 9, c[1] + 6], 5, 'prop');
           line([c[0] + 9, c[1] - 6], [c[0] + 9, c[1] + 6], 5, 'prop');
-        } else out.push({ k: 'c', c, r: 6.5, fill: true, w: 0, cl: 'prop' });
+        } else {
+          out.push({ k: 'c', c, r: 6.5, fill: true, w: 0, cl: 'prop' });
+          out.push({ k: 'c', c, r: 3.2, fill: false, w: 1.2, cl: 'scene' });
+        }
         break;
       }
       case 'bb': {
         const c: V = [j[pr.at][0] + (pr.dx ?? 0), j[pr.at][1] + (pr.dy ?? 0)];
-        out.push({ k: 'c', c, r: 17, fill: false, w: 4, cl: 'prop' });
+        out.push({ k: 'c', c, r: 17, fill: false, w: 3.5, cl: 'prop' });
         out.push({ k: 'c', c, r: 3, fill: true, w: 0, cl: 'prop' });
         break;
       }
@@ -401,47 +626,48 @@ export function draw(m: Move, p: Pose, tg?: Targets): Prim[] {
   if (!m.noFloor) line([vx, GROUND], [vx + vw, GROUND], 2, 'scene');
   props.filter(isScenery).forEach(propPrims);
 
-  // Far side (dimmed) first.
-  // (Facing the viewer, both arms are in front of the torso, so the far arm comes later.)
-  leg(j.hip2, j.knee2, j.ankle2, j.toe2, !front);
-  if (!front) {
-    arm(j.shoulder2, j.elbow2, j.hand2, true);
-    props.filter((pr) => !isScenery(pr) && isFar(pr)).forEach(propPrims);
-  }
+  const headDir = vec(p.t + (p.h ?? 0), 1);
+  const torsoPart = (dim: boolean) => {
+    const ts = seg(j.hip, j.neck, B.torso.prof, -1);
+    // Neck, then the head (with an ear in side view so you can tell which way it faces).
+    const neckTop: V = [j.neck[0] + headDir[0] * 9, j.neck[1] + headDir[1] * 9];
+    const ns = seg(j.neck, neckTop, front ? [[0, 5, 5], [0.9, 4, 4]] : [[0, 4.8, 4.4], [0.9, 3.9, 3.9]], -1);
+    poly(outline(ns), 'skin', dim);
+    poly(outline(ns, 0.7), 'mu', dim);
+    const hs = seg(
+      [j.head[0] - headDir[0] * 9.5, j.head[1] - headDir[1] * 9.5],
+      [j.head[0] + headDir[0] * 9.5, j.head[1] + headDir[1] * 9.5],
+      front ? [[0.04, 7.2, 7.2], [0.5, 8.4, 8.4], [0.96, 6.2, 6.2]] : [[0.04, 6.4, 5.4], [0.3, 8.4, 7], [0.6, 8.2, 8.6], [0.96, 5.6, 6.4]],
+      -1,
+    );
+    poly(outline(hs), 'skin', dim);
+    poly(outline(hs, 0.84), 'mu', dim);
+    if (view === 'side') out.push({ k: 'c', c: at(hs, 0.5, -1.6), r: 1.7, fill: true, w: 0, cl: 'skin', dim });
+    poly(outline(ts), 'skin', dim);
+    muscles(ts, B.torso, dim);
+    if (tg?.p.includes('cardio') || tg?.s.includes('cardio')) {
+      out.push({ k: 'c', c: at(ts, 0.76, front ? (view === 'back' ? 0 : 4) : 2.5), r: 4, fill: true, w: 0, cl: 'heart' });
+    }
+    return ts;
+  };
 
-  // Torso: shaped outline (hips, waist, chest, shoulders).
-  const tf = frame(j.hip, j.neck, false);
-  const prof: [number, number, number][] = front
-    ? [[0, 13, 13], [0.45, 11, 11], [0.78, 15, 15], [1, 14, 14]]
-    : [[0, 8, 9.5], [0.45, 7, 7], [0.76, 10, 8], [1, 7, 7.5]];
-  const at = (f: number, s: number): V => [
-    j.hip[0] + tf.d[0] * f * tf.len + tf.n[0] * s,
-    j.hip[1] + tf.d[1] * f * tf.len + tf.n[1] * s,
-  ];
-  const torso: V[] = [
-    ...prof.map(([f, fw]) => at(f, fw)),
-    at(1.08, 0),
-    ...[...prof].reverse().map(([f, , bw]) => at(f, -bw)),
-    at(-0.1, 0),
-  ];
-  if (front) poly(capsule(j.shoulder, j.shoulder2, 6.5, 6.5), 'body', true);
-  poly(torso, 'body', true);
-  if (!front) muscles(j.hip, j.neck, TORSO, false, false);
-  if (tg?.p.includes('cardio') || tg?.s.includes('cardio')) {
-    out.push({ k: 'c', c: at(0.72, front ? -5 : 3), r: 4.5, fill: true, w: 0, cl: 'heart' });
-  }
-  poly(capsule(j.neck, add(j.neck, vec(p.t + (p.h ?? 0), 9)), 4.5, 4.5), 'body', true);
-  out.push({ k: 'c', c: j.head, r: 10, fill: true, w: 0, cl: 'body' });
-
-  // Near side.
   if (front) {
+    leg(j.hip2, j.knee2, j.ankle2, j.toe2, false);
+    leg(j.hip1, j.knee, j.ankle, j.toe, false);
+    torsoPart(false);
     arm(j.shoulder2, j.elbow2, j.hand2, false);
     props.filter((pr) => !isScenery(pr) && isFar(pr)).forEach(propPrims);
+    arm(j.shoulder, j.elbow, j.hand, false);
+  } else {
+    leg(j.hip2, j.knee2, j.ankle2, j.toe2, true);
+    arm(j.shoulder2, j.elbow2, j.hand2, true);
+    props.filter((pr) => !isScenery(pr) && isFar(pr)).forEach(propPrims);
+    const ts = torsoPart(false);
+    leg(j.hip1, j.knee, j.ankle, j.toe, false);
+    // The near glute sits over the top of the near thigh.
+    for (const [key, t0, t1, lo, hi] of SIDE.glutes.mus) poly(belly(ts, t0, t1, lo, hi), level(key), false, key ?? undefined);
+    arm(j.shoulder, j.elbow, j.hand, false);
   }
-  leg(j.hip1, j.knee, j.ankle, j.toe, false);
-  // Facing the viewer (or from behind), the thighs would cover glutes/abs, so draw torso muscles on top.
-  if (front) muscles(j.hip, j.neck, TORSO, false, false);
-  arm(j.shoulder, j.elbow, j.hand, false);
   props.filter((pr) => !isScenery(pr) && !isFar(pr)).forEach(propPrims);
   return out;
 }

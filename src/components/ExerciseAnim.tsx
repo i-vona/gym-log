@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { draw, poseAt, VIEW, type Move, type Targets } from '../anim/figure';
 import { useI18n } from '../i18n';
+import { FigurePrims } from './Figure';
 
 /** Animated figure for an exercise with the worked muscles highlighted. Tap to pause. */
 export function ExerciseAnim({ move, targets, label, big }: { move: Move; targets?: Targets; label: string; big?: boolean }) {
@@ -29,20 +30,7 @@ export function ExerciseAnim({ move, targets, label, big }: { move: Move; target
   return (
     <button className={big ? 'anim anim-big' : 'anim'} onClick={() => setPlaying((p) => !p)} aria-label={label}>
       <svg viewBox={vb.join(' ')} role="img" aria-label={label}>
-        {prims.map((p, i) => {
-          if (p.k === 'l') return <line key={i} className={`a-${p.c}`} x1={p.a[0]} y1={p.a[1]} x2={p.b[0]} y2={p.b[1]} strokeWidth={p.w} />;
-          if (p.k === 'p') {
-            const d = 'M' + p.pts.map((q) => `${q[0].toFixed(1)},${q[1].toFixed(1)}`).join('L') + 'Z';
-            return <path key={i} d={d} className={`a-${p.cl}${p.edge ? ' a-edge' : ''}${p.dim ? ' a-dim' : ''}`} />;
-          }
-          if (p.k === 'c') {
-            const dim = p.dim ? ' a-dim' : '';
-            return p.fill
-              ? <circle key={i} className={`a-${p.cl} a-fill${dim}`} cx={p.c[0]} cy={p.c[1]} r={p.r} />
-              : <circle key={i} className={`a-${p.cl} a-ring${dim}`} cx={p.c[0]} cy={p.c[1]} r={p.r} strokeWidth={p.w} />;
-          }
-          return <rect key={i} className={`a-${p.cl} a-fill`} x={p.x} y={p.y} width={p.w} height={p.h} rx={2} />;
-        })}
+        <FigurePrims prims={prims} />
       </svg>
       {!playing && <span className="anim-play" aria-hidden="true">▶</span>}
     </button>

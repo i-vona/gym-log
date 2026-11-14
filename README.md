@@ -7,7 +7,8 @@ carries and body weight. Works offline. All data stays in the browser on the pho
 - React + Vite + TypeScript, Dexie (IndexedDB), vite-plugin-pwa
 - UI in English and Croatian (`src/i18n.tsx`)
 - Workout plans: `src/plans.ts`
-- Exercise animations: stick-figure engine in `src/anim/figure.ts`, poses in `src/anim/moves.ts`
+- Exercise animations and the muscle map: anatomical figure engine in `src/anim/figure.ts`, poses in `src/anim/moves.ts`, muscles per exercise in `src/anim/muscles.ts`
+- Muscle analytics (direct vs indirect sets, observations): `src/analytics.ts`
 
 ## Develop
 

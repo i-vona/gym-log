@@ -28,7 +28,7 @@ export function GeneratorView({ date, onClose, onSaved }: { date: string; onClos
   // Hours since each muscle was last trained as a main muscle (last 4 days).
   const recent = useLiveQuery(async () => {
     const since = new Date(Date.now() - 4 * 86400e3).toISOString().slice(0, 10);
-    const [es, exs] = await Promise.all([db.entries.where('date').aboveOrEqual(since).toArray(), db.exercises.toArray()]);
+    const [es, exs] = await Promise.all([db.entries.where('date').aboveOrEqual(since).filter((e) => !e.warmup).toArray(), db.exercises.toArray()]);
     const keyOf = new Map(exs.map((e) => [e.id!, e.key]));
     const r: Recent = {};
     for (const e of es) {

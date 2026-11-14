@@ -4,15 +4,18 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, parseNum, type Entry, type Exercise, type PlanItem } from '../db';
 import { useI18n } from '../i18n';
 import { fieldsFor, planDefault, useExerciseFormat, type Field } from '../exerciseFormat';
-import { fmtClock } from '../timer';
+import { fmtClock, useTimer } from '../timer';
+import { useUndo } from '../undo';
+import { Ring } from './Ring';
 import { beep, finishedSignal, keepAwake, unlockAudio } from '../sound';
 
 type Side = 'L' | 'R';
 type Vals = Partial<Record<Field, number | undefined>>;
 
-/** Number of sets logged; for one-sided exercises a left + right pair counts as one set. */
+/** Working sets logged (warm-ups don't count); for one-sided exercises a left + right pair counts as one set. */
 // eslint-disable-next-line react-refresh/only-export-components
-export function setCount(entries: Entry[], ex: Exercise) {
+export function setCount(all: Entry[], ex: Exercise) {
+  const entries = all.filter((e) => !e.warmup);
   if (!ex.unilateral) return entries.length;
   const l = entries.filter((e) => e.side === 'L').length;
   const r = entries.filter((e) => e.side === 'R').length;
@@ -35,11 +38,16 @@ export function useSetLogger(exercise: Exercise, date: string, entries: Entry[],
   const [b, setB] = useState('');
   const [aR, setAR] = useState('');
   const [bR, setBR] = useState('');
+  const [warm, setWarm] = useState(false);
+  const showUndo = useUndo();
+  const timer = useTimer();
+  const { t } = useI18n();
 
   const previous = useLiveQuery(async () => {
     const prior = await db.entries
       .where('[exerciseId+date]')
       .between([exercise.id!, Dexie.minKey], [exercise.id!, date], true, false)
+      .filter((e) => !e.warmup)
       .toArray();
     if (!prior.length) return null;
     const lastDate = prior[prior.length - 1].date;
@@ -72,6 +80,7 @@ export function useSetLogger(exercise: Exercise, date: string, entries: Entry[],
   const record = (v: Vals, side: Side | undefined, at: number): Entry => {
     const rec: Entry = { date, exerciseId: exercise.id!, createdAt: at };
     if (side) rec.side = side;
+    if (warm) rec.warmup = true;
     for (const f of fields) {
       let x = v[f];
       if (f === 'weight') x = x ?? 0;
@@ -84,19 +93,27 @@ export function useSetLogger(exercise: Exercise, date: string, entries: Entry[],
   const add = async (override?: Vals) => {
     unlockAudio();
     const now = Date.now();
+    let ids: number[];
     if (uni) {
       const recs = [valid(valsL) && record(valsL, 'L', now), valid(valsR) && record(valsR, 'R', now + 1)].filter(Boolean) as Entry[];
       if (!recs.length) return;
-      await db.entries.bulkAdd(recs);
+      ids = (await db.entries.bulkAdd(recs, { allKeys: true })) as number[];
     } else {
       const v = { ...valsL, ...override };
       if (!valid(v)) return;
-      await db.entries.add(record(v, undefined, now));
+      ids = [(await db.entries.add(record(v, undefined, now))) as number];
     }
-    onLogged();
+    const wasWarm = warm;
+    setWarm(false);
+    showUndo(wasWarm ? `${t.setLogged} (${t.warmupSet.toLowerCase()})` : t.setLogged, async () => {
+      await db.entries.bulkDelete(ids);
+      if (!wasWarm) timer.stopRest();
+    });
+    // Warm-up sets don't count towards the plan, so they don't start rest or move on.
+    if (!wasWarm) onLogged();
   };
 
-  return { fa, fb, uni, a, b, setA, setB, aR, bR, setAR, setBR, canAdd, add, previous };
+  return { fa, fb, uni, a, b, setA, setB, aR, bR, setAR, setBR, canAdd, add, previous, warm, setWarm };
 }
 
 type Logger = ReturnType<typeof useSetLogger>;
@@ -107,8 +124,15 @@ export function SetInputs({ exercise, logger, item, big, addLabel }: {
 }) {
   const { t } = useI18n();
   const { fieldLabel } = useExerciseFormat();
-  const { fa, fb, uni, a, b, setA, setB, aR, bR, setAR, setBR, canAdd, add } = logger;
+  const { fa, fb, uni, a, b, setA, setB, aR, bR, setAR, setBR, canAdd, add, warm, setWarm } = logger;
   const hold = exercise.type === 'hold';
+  // Warm-up sets make sense for loaded lifts.
+  const warmToggle = exercise.type === 'strength' && fa === 'weight' && !exercise.assisted && (
+    <label className={warm ? 'warm-toggle on' : 'warm-toggle'}>
+      <input type="checkbox" checked={warm} onChange={(e) => setWarm(e.target.checked)} />
+      <span>{t.warmupSet}</span>
+    </label>
+  );
   const target = parseNum(planDefault(item) || b) ?? 0;
 
   const inputs = (va: string, sa: (s: string) => void, vb: string, sb: (s: string) => void, showLabels: boolean) => (
@@ -127,6 +151,7 @@ export function SetInputs({ exercise, logger, item, big, addLabel }: {
   if (uni) {
     return (
       <form className={big ? 'side-form big' : 'side-form'} onSubmit={(e) => { e.preventDefault(); void add(); }}>
+        {warmToggle}
         <div className={fa ? 'side-row side-head' : 'side-row side-head single'}>
           <span />
           {fa && <span>{fieldLabel(fa, exercise)}</span>}
@@ -149,6 +174,7 @@ export function SetInputs({ exercise, logger, item, big, addLabel }: {
 
   return (
     <>
+      {warmToggle}
       <form className={big ? 'add-row big' : 'add-row'} onSubmit={(e) => { e.preventDefault(); void add(); }}>
         {inputs(a, setA, b, setB, true)}
         <button className="primary" disabled={!canAdd}>{addLabel ?? t.add}</button>
@@ -161,26 +187,33 @@ export function SetInputs({ exercise, logger, item, big, addLabel }: {
 /** Today's logged sets with delete buttons; left/right pairs share one row. */
 export function SetList({ exercise, entries }: { exercise: Exercise; entries: Entry[] }) {
   const { t } = useI18n();
+  const showUndo = useUndo();
   const { describe } = useExerciseFormat();
   if (!entries.length) return null;
 
   const rows: Entry[][] = [];
-  if (exercise.unilateral) {
-    const L = entries.filter((e) => e.side === 'L');
-    const R = entries.filter((e) => e.side === 'R');
-    for (let i = 0; i < Math.max(L.length, R.length); i++) rows.push([L[i], R[i]].filter(Boolean));
-    entries.filter((e) => !e.side).forEach((e) => rows.push([e]));
-  } else entries.forEach((e) => rows.push([e]));
+  // Warm-ups first (they're done first), then working sets; left/right pairs share a row.
+  for (const group of [entries.filter((e) => e.warmup), entries.filter((e) => !e.warmup)]) {
+    if (exercise.unilateral) {
+      const L = group.filter((e) => e.side === 'L');
+      const R = group.filter((e) => e.side === 'R');
+      for (let i = 0; i < Math.max(L.length, R.length); i++) rows.push([L[i], R[i]].filter(Boolean));
+      group.filter((e) => !e.side).forEach((e) => rows.push([e]));
+    } else group.forEach((e) => rows.push([e]));
+  }
 
+  // Delete straight away; the undo message brings it back.
   const remove = async (row: Entry[]) => {
-    if (confirm(t.confirmDelete)) await db.entries.bulkDelete(row.map((e) => e.id!));
+    await db.entries.bulkDelete(row.map((e) => e.id!));
+    showUndo(t.setDeleted, async () => { await db.entries.bulkPut(row); });
   };
+  let n = 0;
 
   return (
     <ol className="sets">
-      {rows.map((row, i) => (
-        <li key={row[0].id}>
-          <span className="set-no">{i + 1}</span>
+      {rows.map((row) => (
+        <li key={row[0].id} className={row[0].warmup ? 'warm' : undefined}>
+          <span className={row[0].warmup ? 'set-no warm' : 'set-no'} title={row[0].warmup ? t.warmupSet : undefined}>{row[0].warmup ? t.warmupShort : ++n}</span>
           <span className="set-val">
             {row.map((e) => (
               <span key={e.id} className="side-val">
@@ -235,10 +268,14 @@ export function HoldTimer({ target, onDone, label }: { target: number; onDone: (
       </button>
     );
   }
+  const progress = elapsed < 0 ? 1 + elapsed / 3 : target ? elapsed / target : (elapsed % 60) / 60;
   return (
     <button type="button" className={elapsed < 0 ? 'hold-run ready' : target && elapsed >= target ? 'hold-run reached' : 'hold-run'} onClick={stop}>
-      <span>{elapsed < 0 ? t.getReady : label ? t.stop : t.holdStop}</span>
-      <strong>{elapsed < 0 ? Math.ceil(-elapsed) : fmtClock(elapsed)}</strong>
+      <Ring value={progress} size={150} stroke={10}>
+        <strong>{elapsed < 0 ? Math.ceil(-elapsed) : fmtClock(elapsed)}</strong>
+        {target > 0 && elapsed >= 0 && <small>/ {fmtClock(target)}</small>}
+      </Ring>
+      <span>{elapsed < 0 ? t.getReady : label ? `${t.stop} – ${label}` : t.holdStop}</span>
     </button>
   );
 }

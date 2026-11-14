@@ -5,6 +5,7 @@ import App from './App.tsx';
 import { I18nProvider } from './i18n';
 import { ensureSeed } from './db';
 import { TimerProvider } from './timer';
+import { UndoProvider } from './undo';
 
 // Ask the browser not to evict our data when the phone is low on storage.
 navigator.storage?.persist?.().catch(() => {});
@@ -14,7 +15,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <I18nProvider>
       <TimerProvider>
-        <App />
+        <UndoProvider>
+          <App />
+        </UndoProvider>
       </TimerProvider>
     </I18nProvider>
   </StrictMode>,

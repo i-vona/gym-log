@@ -8,6 +8,9 @@ import { recommendedRest } from '../rest';
 import { MOVES } from '../anim/moves';
 import { MUSCLES } from '../anim/muscles';
 import { ExerciseAnim } from '../components/ExerciseAnim';
+import { Ring } from '../components/Ring';
+import { WorkoutSummary } from '../components/WorkoutSummary';
+import type { SwappedItem } from '../swap';
 import { ExerciseInfo } from '../components/ExerciseInfo';
 import { SetInputs, SetList, setCount, useSetLogger } from '../components/SetLogger';
 
@@ -56,7 +59,7 @@ function buildSteps(plan: Plan, exOf: (it: PlanItem) => Exercise | undefined): S
   return steps;
 }
 
-export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle }: {
+export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle, onSwap }: {
   plan: Plan;
   date: string;
   day: Day | undefined;
@@ -64,6 +67,8 @@ export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle }:
   exOf: (it: PlanItem) => Exercise | undefined;
   onClose: () => void;
   onToggle: (id: string) => void;
+  /** "Equipment busy?" for the plan item at "section-item". */
+  onSwap?: (loc: string, ex: Exercise, original?: Exercise) => void;
 }) {
   const { t, lt, exName } = useI18n();
   const timer = useTimer();
@@ -141,14 +146,16 @@ export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle }:
       <main className="focus-body">
         {timer.rest && (
           <section className="focus-rest" role="timer">
-            <span className="focus-rest-label">{t.restTimer}</span>
-            <strong>{fmtClock(timer.left)}</strong>
-            <div className="focus-rest-bar"><div style={{ width: `${(timer.left / timer.rest.total) * 100}%` }} /></div>
-            <div className="row-actions">
+            <Ring value={timer.left / timer.rest.total} size={220} stroke={12} className={timer.rest.pausedLeft != null ? 'ring-paused' : ''}>
+              <span className="focus-rest-label">{timer.rest.pausedLeft != null ? t.paused : t.restTimer}</span>
+              <strong>{fmtClock(timer.left)}</strong>
+            </Ring>
+            <div className="rest-controls">
               <button className="ghost" onClick={() => timer.adjust(-15)}>−15</button>
+              <button className="ghost" onClick={timer.togglePause}>{timer.rest.pausedLeft != null ? `▶ ${t.resume}` : `❚❚ ${t.pause}`}</button>
               <button className="ghost" onClick={() => timer.adjust(15)}>+15</button>
-              <button className="primary" onClick={timer.stopRest}>{t.skip}</button>
             </div>
+            <button className="primary wide" onClick={timer.stopRest}>{t.skip}</button>
             <p className="focus-next">{t.nextUp}: <b>{nextName}</b></p>
           </section>
         )}
@@ -179,6 +186,11 @@ export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle }:
             onLogged={() => afterSet(step)}
             onNext={() => go(idx + 1)}
             groupPos={step.group ? step.group.indexOf(idx) : -1}
+            original={(step.item as SwappedItem).from ? exOf((step.item as SwappedItem).from!) : undefined}
+            onSwap={onSwap && step.ex.key ? () => {
+              const from = (step.item as SwappedItem).from;
+              onSwap(`${step.si}-${plan.sections[step.si].items.indexOf(step.item)}`, step.ex, from ? exOf(from) : undefined);
+            } : undefined}
           />
         )}
 
@@ -186,7 +198,7 @@ export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle }:
           <section className="focus-done">
             <div className="focus-done-icon" aria-hidden="true">✓</div>
             <h2>{t.workoutDone}</h2>
-            <p className="hint">{t.sets}: {entries.length}{entries.length > 1 ? ` · ${t.duration}: ${fmtClock((entries[entries.length - 1].createdAt - entries[0].createdAt) / 1000)}` : ''}</p>
+            <WorkoutSummary date={date} entries={entries} />
             <button className="primary wide" onClick={onClose}>{t.finish}</button>
           </section>
         )}
@@ -200,7 +212,7 @@ export function FocusView({ plan, date, day, entries, exOf, onClose, onToggle }:
   );
 }
 
-function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, groupPos }: {
+function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, groupPos, onSwap, original }: {
   step: Extract<Step, { kind: 'ex' }>;
   sets: number | undefined;
   date: string;
@@ -209,8 +221,10 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
   onLogged: () => void;
   onNext: () => void;
   groupPos: number;
+  onSwap?: () => void;
+  original?: Exercise;
 }) {
-  const { t, exName, fmtDate } = useI18n();
+  const { t, exName, fmtDate, fill } = useI18n();
   const { describe, target } = useExerciseFormat();
   const { ex, item } = step;
   const logger = useSetLogger(ex, date, entries, item, onLogged);
@@ -235,6 +249,7 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
           <button className="info-btn big" aria-label={t.aboutExercise} onClick={() => setInfo(true)}>i</button>
         </div>
         <p className="target">{target(item)}</p>
+        {original && <p className="swapped-note">⇄ {fill(t.insteadOf, { x: exName(original) })}</p>}
       </div>
 
       {sets != null && (
@@ -248,6 +263,7 @@ function ExerciseStep({ step, sets, date, entries, resting, onLogged, onNext, gr
         <p className="hint">{t.lastTime} ({fmtDate(logger.previous[0].date)}): {logger.previous.map((e) => describe(e, ex)).join(', ')}</p>
       )}
 
+      {onSwap && !done && n === 0 && <button className="swap-link" onClick={onSwap}>⇄ {t.equipBusy}</button>}
       {ex.unilateral && !done && <p className="side-hint">{t.sidesShortHint}</p>}
       {done
         ? <button className="primary wide" onClick={onNext}>{t.next} ›</button>
