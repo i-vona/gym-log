@@ -24,8 +24,11 @@ export interface Pose {
   ua?: number; fa?: number; ua2?: number; fa2?: number;
   th?: number; sh?: number; th2?: number; sh2?: number;
   ft?: number; ft2?: number;
-  /** leg / arm length scale (foreshortening) */
+  /** leg / arm length scale (foreshortening); thl scales only the thighs (seated, seen from the front) */
   ll?: number;
+  thl?: number;
+  /** scene offset for moving scenery (stairs), in steps; blends forwards, modulo 1 */
+  sc?: number;
   al?: number;
   ik?: IK; ik2?: IK; ikL?: IK; ikL2?: IK;
   /** Which joint is pinned where. 'ground': hip x fixed, lowest foot on the floor. */
@@ -33,16 +36,22 @@ export interface Pose {
 }
 
 export type Prop =
-  | { k: 'db'; at: Joint; front?: boolean }
-  | { k: 'bb'; at: Joint; dx?: number; dy?: number }
+  /** front: seen end-on from the front; hang: held by one end, hanging below the hands */
+  | { k: 'db'; at: Joint; front?: boolean; hang?: boolean }
+  /** tb: offset in the torso's frame [along the torso, towards the back], e.g. a bar on the upper back */
+  | { k: 'bb'; at: Joint; dx?: number; dy?: number; tb?: [number, number] }
+  /** a round pad by a joint, on the side of `toward` (d < 0: on the opposite side) */
+  | { k: 'roll'; at: Joint; toward: Joint; d: number }
+  /** a staircase that scrolls down with the pose's `sc`; (x, y) = start of step 0; clipped to box [x0, y0, x1, y1] */
+  | { k: 'stairs'; x: number; y: number; w: number; h: number; box: [number, number, number, number] }
   | { k: 'plate'; at: Joint }
   | { k: 'wheel'; at: Joint }
   | { k: 'pad'; at: Joint; dy?: number; w?: number }
   | { k: 'grip'; at: Joint }
   | { k: 'band'; a: Joint; b: Joint }
   | { k: 'kb'; at: Joint }
-  | { k: 'rod'; from: V; to: Joint }
-  | { k: 'seg'; at: Joint; a: number; len: number; w?: number }
+  | { k: 'rod'; from: V; to: Joint; w?: number }
+  | { k: 'seg'; at: Joint; a: number; len: number; w?: number; dx?: number; dy?: number }
   | { k: 'cable'; from: V; to: Joint }
   | { k: 'line'; a: V; b: V; w?: number }
   | { k: 'rect'; x: number; y: number; w: number; h: number }
@@ -104,9 +113,10 @@ export function joints(p: Pose): Record<Joint, V> {
     const e = add(s, vec(ua, L.ua * al));
     return [e, add(e, vec(fa, L.fa * al))];
   };
+  const thl = p.thl ?? 1;
   const leg = (s: V, th: number, sh: number, ik?: IK): [V, V] => {
-    if (ik) return solveIK(s, [ik[0], ik[1]], L.th * ll, L.sh * ll, ik[2]);
-    const k = add(s, vec(th, L.th * ll));
+    if (ik) return solveIK(s, [ik[0], ik[1]], L.th * ll * thl, L.sh * ll, ik[2]);
+    const k = add(s, vec(th, L.th * ll * thl));
     return [k, add(k, vec(sh, L.sh * ll))];
   };
 
@@ -129,7 +139,8 @@ export function joints(p: Pose): Record<Joint, V> {
   };
 }
 
-function anchored(p: Pose): Record<Joint, V> {
+/** Joint positions on the canvas. */
+export function anchored(p: Pose): Record<Joint, V> {
   const j = joints(p);
   const [part, x, y] = p.at;
   let dx: number, dy: number;
@@ -153,7 +164,7 @@ function normalize(p: Pose): Pose {
   const ua = p.ua ?? -90, fa = p.fa ?? -90, th = p.th ?? -90, sh = p.sh ?? -90;
   return {
     ...p,
-    h: p.h ?? 0, tl: p.tl ?? 1, ll: p.ll ?? 1, al: p.al ?? 1,
+    h: p.h ?? 0, tl: p.tl ?? 1, ll: p.ll ?? 1, al: p.al ?? 1, thl: p.thl ?? 1, sc: p.sc ?? 0,
     ua, fa, th, sh,
     ua2: p.ua2 ?? mir(ua), fa2: p.fa2 ?? mir(fa), th2: p.th2 ?? mir(th), sh2: p.sh2 ?? mir(sh),
   };
@@ -168,7 +179,9 @@ export function lerpPose(a0: Pose, b0: Pose, u: number): Pose {
     const vb = b[key];
     if (typeof va === 'number' && typeof vb === 'number') {
       // Angles take the shorter way round; scale factors are linear.
-      const d = ANGLE_KEYS.has(key) ? ((((vb - va + 540) % 360) + 360) % 360) - 180 : vb - va;
+      const d = ANGLE_KEYS.has(key) ? ((((vb - va + 540) % 360) + 360) % 360) - 180
+        : key === 'sc' ? (((vb - va) % 1) + 1) % 1
+        : vb - va;
       out[key] = va + d * u;
     }
     else if (Array.isArray(va) && Array.isArray(vb)) {
@@ -313,6 +326,21 @@ function belly(s: Seg, t0: number, t1: number, lo: number, hi: number): V[] {
   return [...a, ...b.reverse()];
 }
 
+/** The part of segment a–b inside box [x0, y0, x1, y1] (Liang–Barsky), or null. */
+function clip(a: V, b: V, box: [number, number, number, number]): [V, V] | null {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  let u0 = 0;
+  let u1 = 1;
+  for (const [p, q] of [[-dx, a[0] - box[0]], [dx, box[2] - a[0]], [-dy, a[1] - box[1]], [dy, box[3] - a[1]]]) {
+    if (p === 0) { if (q < 0) return null; continue; }
+    const r = q / p;
+    if (p < 0) u0 = Math.max(u0, r); else u1 = Math.min(u1, r);
+    if (u0 > u1) return null;
+  }
+  return [[a[0] + dx * u0, a[1] + dy * u0], [a[0] + dx * u1, a[1] + dy * u1]];
+}
+
 /** Limbs are drawn a little fuller than the profiles below. */
 const LIMB = 1.2;
 
@@ -408,6 +436,9 @@ const FRONT = {
     mus: [
       [null, 0.56, 0.74, 0.58, 0.95],
       [null, 0.56, 0.74, -0.95, -0.58],
+      // Gluteus medius, seen at the side of the hips.
+      ['glutes', -0.2, 0.16, 0.64, 1.04],
+      ['glutes', -0.2, 0.16, -1.04, -0.64],
       ['obliques', 0.02, 0.62, 0.4, 0.95],
       ['obliques', 0.02, 0.62, -0.95, -0.4],
       ['abs', -0.06, 0.66, 0.02, 0.37],
@@ -551,7 +582,12 @@ export function draw(m: Move, p: Pose, tg?: Targets, paint?: (mu: Muscle) => Cls
     switch (pr.k) {
       case 'db': {
         const c = j[pr.at];
-        if (pr.front) {
+        if (pr.hang) {
+          // Held by the top plate with both hands, hanging between the legs.
+          line([c[0], c[1]], [c[0], c[1] + 18], 3, 'prop');
+          line([c[0] - 7, c[1] + 1], [c[0] + 7, c[1] + 1], 5, 'prop');
+          line([c[0] - 7, c[1] + 19], [c[0] + 7, c[1] + 19], 5, 'prop');
+        } else if (pr.front) {
           line([c[0] - 8, c[1]], [c[0] + 8, c[1]], 3, 'prop');
           line([c[0] - 9, c[1] - 6], [c[0] - 9, c[1] + 6], 5, 'prop');
           line([c[0] + 9, c[1] - 6], [c[0] + 9, c[1] + 6], 5, 'prop');
@@ -562,7 +598,8 @@ export function draw(m: Move, p: Pose, tg?: Targets, paint?: (mu: Muscle) => Cls
         break;
       }
       case 'bb': {
-        const c: V = [j[pr.at][0] + (pr.dx ?? 0), j[pr.at][1] + (pr.dy ?? 0)];
+        let c: V = [j[pr.at][0] + (pr.dx ?? 0), j[pr.at][1] + (pr.dy ?? 0)];
+        if (pr.tb) c = add(add(c, vec(p.t, pr.tb[0])), vec(p.t + 90, pr.tb[1]));
         out.push({ k: 'c', c, r: 17, fill: false, w: 3.5, cl: 'prop' });
         out.push({ k: 'c', c, r: 3, fill: true, w: 0, cl: 'prop' });
         break;
@@ -584,8 +621,28 @@ export function draw(m: Move, p: Pose, tg?: Targets, paint?: (mu: Muscle) => Cls
         out.push({ k: 'c', c: j[pr.at], r: 3.5, fill: true, w: 0, cl: 'prop' });
         break;
       case 'rod':
-        line(pr.from, j[pr.to], 5, 'prop');
+        line(pr.from, j[pr.to], pr.w ?? 5, 'prop');
         break;
+      case 'roll': {
+        const a = j[pr.at];
+        const d = unit(a, j[pr.toward]);
+        out.push({ k: 'c', c: [a[0] + d[0] * pr.d, a[1] + d[1] * pr.d], r: 4.5, fill: true, w: 0, cl: 'prop' });
+        break;
+      }
+      case 'stairs': {
+        const f = ((p.sc ?? 0) % 1 + 1) % 1;
+        const x0 = pr.x - f * pr.w;
+        const y0 = pr.y + f * pr.h;
+        for (let k = -8; k <= 8; k++) {
+          const tx = x0 + k * pr.w;
+          const ty = y0 - k * pr.h;
+          for (const [a, b] of [[[tx, ty], [tx + pr.w, ty]], [[tx + pr.w, ty], [tx + pr.w, ty - pr.h]]] as [V, V][]) {
+            const s = clip(a, b, pr.box);
+            if (s) line(s[0], s[1], 4, 'scene');
+          }
+        }
+        break;
+      }
       case 'band':
         line(j[pr.a], j[pr.b], 3, 'band');
         break;
@@ -596,7 +653,7 @@ export function draw(m: Move, p: Pose, tg?: Targets, paint?: (mu: Muscle) => Cls
         break;
       }
       case 'seg': {
-        const c = j[pr.at];
+        const c: V = [j[pr.at][0] + (pr.dx ?? 0), j[pr.at][1] + (pr.dy ?? 0)];
         const d = vec(pr.a, pr.len / 2);
         line([c[0] - d[0], c[1] - d[1]], [c[0] + d[0], c[1] + d[1]], pr.w ?? 5, 'prop');
         break;
@@ -620,7 +677,7 @@ export function draw(m: Move, p: Pose, tg?: Targets, paint?: (mu: Muscle) => Cls
   };
 
   const props = m.props ?? [];
-  const isScenery = (pr: Prop) => pr.k === 'rod' || pr.k === 'line' || pr.k === 'rect' || pr.k === 'circle' || pr.k === 'cable' || pr.k === 'water';
+  const isScenery = (pr: Prop) => pr.k === 'stairs' || pr.k === 'rod' || pr.k === 'line' || pr.k === 'rect' || pr.k === 'circle' || pr.k === 'cable' || pr.k === 'water';
   const isFar = (pr: Prop) => 'at' in pr && pr.at.endsWith('2');
 
   if (!m.noFloor) line([vx, GROUND], [vx + vw, GROUND], 2, 'scene');

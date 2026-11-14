@@ -1,7 +1,31 @@
-import type { Move, Pose } from './figure';
+import { anchored, type IK, type Joint, type Move, type Pose, type V } from './figure';
 
 // Ankle height when standing on the floor.
 const A = 178;
+
+type Loose = Omit<Pose, 'at'> & { at?: Pose['at'] };
+
+/** Anchors a pose by its hip so that joint `j` lands on (x, y). */
+function pin(p: Loose, j: Joint, x: number, y: number): Pose {
+  const q = anchored({ ...p, at: ['hip', 0, 0] });
+  return { ...p, at: ['hip', x - q[j][0], y - q[j][1]] };
+}
+/** Canvas position of a joint. */
+const pos = (p: Pose, j: Joint): V => anchored(p)[j];
+/** IK target (relative to the hip) that puts a hand or foot on the canvas point (x, y). */
+function to(p: Pose, x: number, y: number, bend: number): IK {
+  const h = anchored(p).hip;
+  return [x - h[0], y - h[1], bend];
+}
+/** Push-up style move: the hands stay where they are in the top position. */
+function handsFixed(top: Pose, bottom: Pose, bend = -1): Pose[] {
+  const h = pos(top, 'hand');
+  return [{ ...top, ik: to(top, h[0], h[1], bend) }, { ...bottom, ik: to(bottom, h[0], h[1], bend) }];
+}
+/** Split stance: the back foot stays on `back` while the front leg bends. */
+function backFoot(frames: Pose[], back: V, bend: number): Pose[] {
+  return frames.map((p) => ({ ...p, ikL2: to(p, back[0], back[1], bend) }));
+}
 
 /** Swaps near and far limbs (for alternating movements like walking). */
 function swap(p: Pose): Pose {
@@ -23,9 +47,13 @@ const walkA: Pose = { t: 88, th: -68, sh: -95, th2: -112, sh2: -125, ua: -105, f
 const walkB: Pose = { t: 88, th: -92, sh: -92, th2: -85, sh2: -120, ua: -90, fa: -85, ua2: -90, fa2: -80, at: ['ground', 100] };
 const walk = [walkA, walkB, swap(walkA), swap(walkB)];
 
-const runA: Pose = { t: 78, th: -40, sh: -105, th2: -120, sh2: -170, ua: -135, fa: -55, ua2: -45, fa2: 25, at: ['ground', 100] };
-const runB: Pose = { t: 80, th: -88, sh: -100, th2: -75, sh2: -155, ua: -95, fa: -20, ua2: -85, fa2: -20, at: ['ground', 100] };
-const run = [runA, runB, swap(runA), swap(runB)];
+// Running: elbows bent about 90°, arms swing opposite to the legs, slight forward lean.
+// Contact (near foot lands just ahead of the hips), mid-stance (knee bent, other heel kicked up
+// under the hips), toe-off (near leg pushes off behind, other knee drives forward).
+const runContact: Pose = { t: 82, th: -64, sh: -97, th2: -116, sh2: -160, ua: -122, fa: -35, ua2: -58, fa2: 30, at: ['ground', 100] };
+const runMid: Pose = { t: 82, th: -88, sh: -108, th2: -72, sh2: -172, ua: -98, fa: -10, ua2: -82, fa2: 12, at: ['ground', 100] };
+const runPush: Pose = { t: 82, th: -118, sh: -136, th2: -42, sh2: -102, ua: -58, fa: 30, ua2: -122, fa2: -35, at: ['ground', 100] };
+const run = [runContact, runMid, runPush, swap(runContact), swap(runMid), swap(runPush)];
 
 /** Points on a circle/ellipse, relative to the hip, for pedalling motions. */
 function orbit(cx: number, cy: number, rx: number, ry: number, n: number, bend: number) {
@@ -41,7 +69,7 @@ function orbit(cx: number, cy: number, rx: number, ry: number, n: number, bend: 
 
 export const MOVES: Record<string, Move> = {
   squat: {
-    props: [{ k: 'bb', at: 'shoulder', dx: -9, dy: 2 }],
+    props: [{ k: 'bb', at: 'shoulder', tb: [-2, 9] }],
     frames: [
       { t: 90, ua: -120, fa: 60, at: ['ankle', 100, A] },
       { t: 50, ua: -160, fa: 20, th: 0, sh: -110, at: ['ankle', 100, A] },
@@ -57,38 +85,42 @@ export const MOVES: Record<string, Move> = {
   rdl: {
     props: [{ k: 'bb', at: 'hand' }],
     frames: [
-      { t: 90, ua: -82, fa: -82, th: -88, sh: -95, at: ['ankle', 100, A] },
-      { t: 15, ua: -90, fa: -90, th: -70, sh: -100, at: ['ankle', 100, A] },
+      { t: 90, ua: -84, fa: -84, th: -88, sh: -94, at: ['ankle', 100, A] },
+      // Hips pushed back, shins nearly vertical, flat back, bar slid down the thighs to the knees.
+      { t: 28, ua: -108, fa: -108, th: -57, sh: -99, at: ['ankle', 100, A] },
     ],
   },
   bench: {
     props: [...bench(30, 120, 120), { k: 'bb', at: 'hand' }],
     frames: [
-      { t: 180, ua: 90, fa: 90, th: -30, sh: -95, at: ['hip', 110, 113] },
-      { t: 180, ua: -80, fa: 90, th: -30, sh: -95, at: ['hip', 110, 113] },
+      // Bar over the shoulders, lowered to the lower chest with the elbows below the bench line.
+      { t: 180, ik: [-50, -52, 1], th: -30, sh: -95, at: ['hip', 110, 113] },
+      { t: 180, ik: [-42, -13, 1], th: -30, sh: -95, at: ['hip', 110, 113] },
     ],
   },
   ohp: {
     vb: [-10, -26, 220, 216],
     props: [{ k: 'bb', at: 'hand' }],
     frames: [
-      { t: 90, ua: -70, fa: 95, at: ['ankle', 100, A] },
-      { t: 90, ua: 88, fa: 88, at: ['ankle', 100, A] },
+      // From the front of the shoulders straight up to locked arms over the head.
+      { t: 90, ik: [10, -50, 1], at: ['ankle', 100, A] },
+      { t: 90, ik: [2, -104, 1], at: ['ankle', 100, A] },
     ],
   },
   dbOhp: {
     vb: [-10, -26, 220, 216],
     props: [{ k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     frames: [
-      { t: 90, ua: -70, fa: 95, at: ['ankle', 100, A] },
-      { t: 90, ua: 88, fa: 88, at: ['ankle', 100, A] },
+      { t: 90, ik: [6, -58, 1], at: ['ankle', 100, A] },
+      { t: 90, ik: [2, -104, 1], at: ['ankle', 100, A] },
     ],
   },
   row: {
     props: [{ k: 'bb', at: 'hand' }],
     frames: [
-      { t: 25, ua: -90, fa: -90, th: -65, sh: -100, at: ['ankle', 110, A] },
-      { t: 25, ua: -160, fa: -90, th: -65, sh: -100, at: ['ankle', 110, A] },
+      // Bar hangs under the shoulders, pulled to the upper belly with the elbows going back.
+      { t: 25, ik: [51, 31, 1], th: -65, sh: -100, at: ['ankle', 110, A] },
+      { t: 25, ik: [32, -2, 1], th: -65, sh: -100, at: ['ankle', 110, A] },
     ],
   },
   pullup: {
@@ -96,8 +128,9 @@ export const MOVES: Record<string, Move> = {
     vb: [0, -12, 200, 202],
     props: [{ k: 'line', a: [50, 30], b: [150, 30], w: 5 }],
     frames: [
-      { t: 90, ua: 90, fa: 90, th: -75, sh: -165, at: ['hand', 100, 30] },
-      { t: 95, ua: -70, fa: 70, th: -75, sh: -165, at: ['hand', 100, 30] },
+      // Dead hang, then chin over the bar with the elbows driven down to the sides.
+      { t: 90, ik: [3, -105, 1], th: -75, sh: -165, at: ['hand', 100, 30] },
+      { t: 95, ik: [3, -52, 1], th: -75, sh: -165, at: ['hand', 100, 30] },
     ],
   },
   assistedPullup: {
@@ -105,27 +138,29 @@ export const MOVES: Record<string, Move> = {
     vb: [0, -12, 200, 202],
     props: [{ k: 'line', a: [50, 30], b: [150, 30], w: 5 }, { k: 'pad', at: 'knee', dy: 3, w: 30 }],
     frames: [
-      { t: 90, ua: 90, fa: 90, th: -60, sh: -175, at: ['hand', 100, 30] },
-      { t: 95, ua: -70, fa: 70, th: -60, sh: -175, at: ['hand', 100, 30] },
+      { t: 90, ik: [3, -105, 1], th: -60, sh: -175, at: ['hand', 100, 30] },
+      { t: 95, ik: [3, -52, 1], th: -60, sh: -175, at: ['hand', 100, 30] },
     ],
   },
   latPulldown: {
     props: [
       { k: 'rect', x: 70, y: 146, w: 45, h: 6 },
       { k: 'line', a: [92, 152], b: [92, 182], w: 4 },
-      { k: 'cable', from: [104, 0], to: 'hand' },
+      { k: 'cable', from: [96, 0], to: 'hand' },
       { k: 'grip', at: 'hand' },
     ],
     frames: [
-      { t: 98, ua: 84, fa: 84, th: 0, sh: -90, at: ['hip', 92, 141] },
-      { t: 102, ua: -105, fa: 70, th: 0, sh: -90, at: ['hip', 92, 141] },
+      // Arms straight up, then the bar comes down to the upper chest, elbows down and back.
+      { t: 98, ik: [-4, -104, 1], th: 0, sh: -90, at: ['hip', 92, 141] },
+      { t: 102, ik: [4, -47, 1], th: 0, sh: -90, at: ['hip', 92, 141] },
     ],
   },
   dips: {
-    props: [{ k: 'line', a: [50, 97], b: [150, 97], w: 5 }, { k: 'line', a: [60, 97], b: [60, 182], w: 4 }, { k: 'line', a: [140, 97], b: [140, 182], w: 4 }],
+    props: [{ k: 'line', a: [50, 88], b: [150, 88], w: 5 }, { k: 'line', a: [60, 88], b: [60, 182], w: 4 }, { k: 'line', a: [140, 88], b: [140, 182], w: 4 }],
     frames: [
-      { t: 92, ua: -72, fa: -100, th: -110, sh: 170, at: ['hand', 100, 95] },
-      { t: 75, ua: -165, fa: -50, th: -115, sh: 170, at: ['hand', 100, 95] },
+      // Arms locked out, then down until the upper arms are level, leaning forward (chest dip).
+      { t: 90, ua: -90, fa: -90, th: -110, sh: 170, at: ['hand', 100, 86] },
+      { t: 66, ua: -170, fa: -80, th: -115, sh: 170, at: ['hand', 100, 86] },
     ],
   },
   legPress: {
@@ -137,10 +172,12 @@ export const MOVES: Record<string, Move> = {
   },
   lunge: {
     props: [{ k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
-    frames: [
-      { t: 90, th: -75, sh: -95, th2: -115, sh2: -125, at: ['ankle', 125, A] },
-      { t: 90, th: -5, sh: -110, th2: -100, sh2: -170, at: ['ankle', 125, A] },
-    ],
+    // Both feet stay planted: down until the back knee nearly touches the floor, torso upright.
+    frames: backFoot([
+      { t: 90, th: -65, sh: -100, ft2: -47, at: ['ankle', 125, A] },
+      { t: 90, th: -36, sh: -98, ft2: -47, at: ['ankle', 125, A] },
+      { t: 90, th: -8, sh: -95, ft2: -47, at: ['ankle', 125, A] },
+    ], [78, 172], -1),
   },
   hipThrust: {
     props: [...bench(14, 145, 46), { k: 'bb', at: 'hip', dy: -6 }],
@@ -156,14 +193,14 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   legCurl: {
-    props: [...bench(30, 124, 130), { k: 'pad', at: 'ankle', dy: -12, w: 12 }],
+    props: [...bench(30, 124, 130), { k: 'roll', at: 'ankle', toward: 'toe', d: -6 }, { k: 'grip', at: 'hand' }],
     frames: [
-      { t: 180, h: 10, ua: -100, fa: -170, th: 0, sh: 0, ft: -60, at: ['hip', 100, 117] },
-      { t: 180, h: 10, ua: -100, fa: -170, th: 0, sh: 105, ft: 20, at: ['hip', 100, 117] },
+      { t: 180, h: 10, ua: -118, fa: -62, th: 0, sh: 0, ft: -60, at: ['hip', 100, 117] },
+      { t: 180, h: 10, ua: -118, fa: -62, th: 0, sh: 105, ft: 20, at: ['hip', 100, 117] },
     ],
   },
   legExtension: {
-    props: [{ k: 'rect', x: 66, y: 136, w: 46, h: 6 }, { k: 'line', a: [64, 136], b: [58, 82], w: 6 }, { k: 'line', a: [90, 142], b: [90, 182], w: 4 }, { k: 'pad', at: 'ankle', dy: -3, w: 12 }],
+    props: [{ k: 'rect', x: 66, y: 136, w: 46, h: 6 }, { k: 'line', a: [64, 136], b: [58, 82], w: 6 }, { k: 'line', a: [90, 142], b: [90, 182], w: 4 }, { k: 'roll', at: 'ankle', toward: 'toe', d: 6 }],
     frames: [
       { t: 98, ua: -90, fa: -60, th: 0, sh: -95, at: ['hip', 74, 131] },
       { t: 98, ua: -90, fa: -60, th: 0, sh: -8, at: ['hip', 74, 131] },
@@ -187,7 +224,8 @@ export const MOVES: Record<string, Move> = {
     vb: [-10, -26, 220, 216],
     props: [{ k: 'db', at: 'hand' }],
     frames: [
-      { t: 90, ua: 100, fa: 200, ua2: 100, fa2: 200, at: ['ankle', 100, A] },
+      // Dumbbell lowered behind the head, elbows pointing up.
+      { t: 90, ua: 100, fa: 240, ua2: 100, fa2: 240, at: ['ankle', 100, A] },
       { t: 90, ua: 95, fa: 92, ua2: 95, fa2: 92, at: ['ankle', 100, A] },
     ],
   },
@@ -216,13 +254,13 @@ export const MOVES: Record<string, Move> = {
     props: [...bench(28, 151, 110), { k: 'db', at: 'hand' }],
     frames: [
       { t: 15, ua: -90, fa: -90, ua2: -90, fa2: -80, th: -60, sh: -100, th2: -90, sh2: 180, at: ['hip', 80, 112] },
-      { t: 15, ua: 160, fa: -90, ua2: -90, fa2: -80, th: -60, sh: -100, th2: -90, sh2: 180, at: ['hip', 80, 112] },
+      { t: 15, ua: 145, fa: -90, ua2: -90, fa2: -80, th: -60, sh: -100, th2: -90, sh2: 180, at: ['hip', 80, 112] },
     ],
   },
   hangingKneeRaise: {
     noFloor: true,
     vb: [0, -8, 200, 200],
-    props: [{ k: 'line', a: [84, 0], b: [84, 190], w: 4 }, { k: 'grip', at: 'hand' }],
+    props: [{ k: 'line', a: [62, 10], b: [118, 10], w: 5 }],
     frames: [
       { t: 90, ua: 92, fa: 92, th: -92, sh: -100, at: ['hand', 90, 10] },
       { t: 95, ua: 92, fa: 92, th: 15, sh: -85, at: ['hand', 90, 10] },
@@ -260,6 +298,7 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   russianTwist: {
+    props: [{ k: 'db', at: 'hand', front: true }],
     frames: [
       { view: 'front', t: 84, tl: 0.85, ik: [36, -24, 1], ik2: [36, -24, -1], ll: 0.55, th: -40, sh: -100, at: ['hip', 100, 160] },
       { view: 'front', t: 96, tl: 0.85, ik: [-36, -24, 1], ik2: [-36, -24, -1], ll: 0.55, th: -40, sh: -100, at: ['hip', 100, 160] },
@@ -268,8 +307,8 @@ export const MOVES: Record<string, Move> = {
   plank: {
     ms: 1800,
     frames: [
-      { t: 168, ua: -90, fa: 180, th: -12, sh: -12, ft: -100, at: ['ankle', 165, 176] },
-      { t: 166, ua: -92, fa: 180, th: -13, sh: -11, ft: -100, at: ['ankle', 165, 176] },
+      { t: 168, ua: -90, fa: 180, th: -12, sh: -12, ft: -100, at: ['ankle', 165, 172] },
+      { t: 166, ua: -92, fa: 180, th: -13, sh: -11, ft: -100, at: ['ankle', 165, 172] },
     ],
   },
   sidePlank: {
@@ -328,20 +367,41 @@ export const MOVES: Record<string, Move> = {
   elliptical: {
     loop: true,
     ms: 260,
-    props: [{ k: 'line', a: [30, 176], b: [175, 176], w: 5 }, { k: 'line', a: [160, 176], b: [150, 60], w: 4 }],
+    props: [
+      // Base rail, front column with the flywheel, moving handles and the two foot pedals.
+      { k: 'line', a: [26, 177], b: [178, 177], w: 5 },
+      { k: 'line', a: [166, 177], b: [154, 64], w: 5 },
+      { k: 'circle', c: [164, 160], r: 12 },
+      { k: 'rod', from: [152, 128], to: 'hand2', w: 3 },
+      { k: 'seg', at: 'ankle2', a: 0, len: 28, w: 4, dx: 3, dy: 5 },
+      { k: 'rod', from: [152, 128], to: 'hand', w: 3 },
+      { k: 'seg', at: 'ankle', a: 0, len: 28, w: 4, dx: 3, dy: 5 },
+    ],
+    // Feet stay flat on the pedals tracing an ellipse; each arm pushes while the same-side leg goes back.
     frames: orbit(8, 66, 22, 7, 8, -1).map((o, i) => ({
-      t: 88, ...o,
-      ik: [30 + Math.cos((i / 8) * Math.PI * 2) * 12, -55, 1] as [number, number, number],
-      ik2: [30 - Math.cos((i / 8) * Math.PI * 2) * 12, -55, 1] as [number, number, number],
+      t: 86, ...o, ft: 0, ft2: 0,
+      ik: [30 - Math.cos((i / 8) * Math.PI * 2) * 12, -42, 1] as IK,
+      ik2: [30 + Math.cos((i / 8) * Math.PI * 2) * 12, -42, 1] as IK,
       at: ['hip', 92, 96] as Pose['at'],
     })),
   },
   stairs: {
-    ms: 600,
-    props: [{ k: 'line', a: [60, 160], b: [150, 160], w: 5 }, { k: 'line', a: [60, 140], b: [150, 140], w: 5 }, { k: 'line', a: [150, 120], b: [150, 182], w: 4 }],
+    // A stair climber: the staircase rolls down, one foot rides a step down while the other
+    // lifts over the edge onto the next step. Hands rest on the side rail.
+    loop: true,
+    ms: 420,
+    noFloor: true,
+    props: [
+      { k: 'stairs', x: 104, y: 152, w: 26, h: 18, box: [54, 34, 178, 180] },
+      { k: 'line', a: [46, 182], b: [184, 182], w: 4 },
+      { k: 'line', a: [96, 107], b: [176, 52], w: 4 },
+      { k: 'line', a: [172, 55], b: [172, 182], w: 4 },
+    ],
     frames: [
-      { t: 85, ikL: [16, 42, -1], ikL2: [8, 66, -1], ua: -100, ua2: -80, at: ['hip', 92, 96] },
-      { t: 85, ikL: [8, 66, -1], ikL2: [16, 42, -1], ua: -80, ua2: -100, at: ['hip', 92, 96] },
+      { t: 80, sc: 0, ikL: [20, 52, -1], ikL2: [-6, 70, -1], ik: [26, -4, 1], ft: 0, ft2: 0, at: ['hip', 92, 96] },
+      { t: 80, sc: 0.5, ikL: [7, 61, -1], ikL2: [10, 41, -1], ik: [26, -4, 1], ft: 0, ft2: -10, at: ['hip', 92, 96] },
+      { t: 80, sc: 0, ikL: [-6, 70, -1], ikL2: [20, 52, -1], ik: [26, -4, 1], ft: 0, ft2: 0, at: ['hip', 92, 96] },
+      { t: 80, sc: 0.5, ikL: [10, 41, -1], ikL2: [7, 61, -1], ik: [26, -4, 1], ft: -10, ft2: 0, at: ['hip', 92, 96] },
     ],
   },
   swimming: {
@@ -370,23 +430,24 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   pushUp: {
-    frames: [
-      { t: 155, ua: -90, fa: -90, th: -25, sh: -25, ft: -100, at: ['ankle', 165, 176] },
-      { t: 172, ua: 35, fa: -115, th: -8, sh: -8, ft: -100, at: ['ankle', 165, 176] },
-    ],
+    // Hands and toes stay put; straight body from head to heels, chest down near the floor.
+    frames: handsFixed(
+      { t: 155, ua: -90, fa: -90, th: -25, sh: -25, ft: -100, at: ['ankle', 165, 172] },
+      { t: 172, th: -8, sh: -8, ft: -100, at: ['ankle', 165, 172] },
+    ),
   },
   dbBench: {
     props: [...bench(30, 120, 120), { k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     frames: [
-      { t: 180, ua: 90, fa: 90, th: -30, sh: -95, at: ['hip', 110, 113] },
-      { t: 180, ua: -80, fa: 90, th: -30, sh: -95, at: ['hip', 110, 113] },
+      { t: 180, ik: [-50, -52, 1], th: -30, sh: -95, at: ['hip', 110, 113] },
+      { t: 180, ik: [-42, -13, 1], th: -30, sh: -95, at: ['hip', 110, 113] },
     ],
   },
   dbRdl: {
     props: [{ k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     frames: [
-      { t: 90, ua: -85, fa: -85, th: -88, sh: -95, at: ['ankle', 100, A] },
-      { t: 15, ua: -90, fa: -90, th: -70, sh: -100, at: ['ankle', 100, A] },
+      { t: 90, ua: -86, fa: -86, th: -88, sh: -94, at: ['ankle', 100, A] },
+      { t: 28, ua: -108, fa: -108, th: -57, sh: -99, at: ['ankle', 100, A] },
     ],
   },
   facePull: {
@@ -433,7 +494,7 @@ export const MOVES: Record<string, Move> = {
   },
 
   frontSquat: {
-    props: [{ k: 'bb', at: 'shoulder', dx: 10, dy: -4 }],
+    props: [{ k: 'bb', at: 'shoulder', tb: [-3, -11] }],
     frames: [
       { t: 90, ua: -5, fa: 168, at: ['ankle', 95, A] },
       { t: 72, ua: 12, fa: 186, th: 0, sh: -115, at: ['ankle', 95, A] },
@@ -441,51 +502,64 @@ export const MOVES: Record<string, Move> = {
   },
   bulgarianSplitSquat: {
     props: [...bench(40, 141, 46), { k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
-    frames: [
-      { t: 90, th: -80, sh: -95, ikL2: [-58, 30, 1], at: ['ankle', 128, A] },
-      { t: 86, th: -12, sh: -105, ikL2: [-32, 2, 1], at: ['ankle', 128, A] },
-    ],
+    // Rear foot laces-down on the bench and stays there; front foot flat; down until the
+    // front thigh is about level and the back knee is near the floor.
+    frames: backFoot([
+      { t: 88, th: -78, sh: -95, ft2: 190, at: ['ankle', 128, A] },
+      { t: 85, th: -45, sh: -98, ft2: 190, at: ['ankle', 128, A] },
+      { t: 82, th: -15, sh: -100, ft2: 190, at: ['ankle', 128, A] },
+    ], [72, 136], -1),
   },
   stepUp: {
     props: [{ k: 'rect', x: 108, y: 160, w: 48, h: 22 }, { k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     frames: [
-      { t: 80, th: -20, sh: -100, ikL2: [-10, 69, 1], at: ['ankle', 128, 157] },
-      { t: 90, th: -90, sh: -90, ikL2: [-6, 50, 1], at: ['ankle', 128, 157] },
+      // Lead foot on the box, back foot flat on the floor, chest slightly forward.
+      { t: 80, th: -20, sh: -100, ikL2: [-8, 71.5, 1], at: ['ankle', 128, 157] },
+      // Driving up: lead leg almost straight, back foot lifted over the edge of the box.
+      { t: 86, th: -65, sh: -95, ikL2: [-4, 64, 1], at: ['ankle', 128, 157] },
+      // Standing tall on the box with both feet.
+      { t: 90, th: -90, sh: -90, ikL2: [-4, 74.5, 1], at: ['ankle', 128, 157] },
     ],
+    ms: 900,
   },
   sumoSquat: {
-    props: [{ k: 'db', at: 'hand', front: true }],
+    props: [{ k: 'db', at: 'hand', hang: true }],
+    // Wide stance, toes out, feet planted; the dumbbell hangs between the legs on straight arms
+    // and the knees track out over the toes; torso stays upright.
     frames: [
-      { view: 'front', t: 90, ik: [0, -18, 1], th: -108, sh: -95, at: ['ground', 100] },
-      { view: 'front', t: 90, ik: [0, -18, 1], th: -150, sh: -98, at: ['ground', 100] },
+      { view: 'front', t: 90, ik: [0, -2, -1], ikL: [30, 71, -1], at: ['hip', 100, 107] },
+      { view: 'front', t: 90, ik: [0, -2, -1], ikL: [30, 43, -1], at: ['hip', 100, 135] },
     ],
   },
   goodMorning: {
-    props: [{ k: 'bb', at: 'shoulder', dx: -8, dy: 2 }],
+    props: [{ k: 'bb', at: 'shoulder', tb: [-2, 9] }],
     frames: [
       { t: 90, ua: -120, fa: 60, th: -88, sh: -95, at: ['ankle', 100, A] },
-      { t: 15, ua: -195, fa: -15, th: -72, sh: -100, at: ['ankle', 100, A] },
+      { t: 12, ua: -198, fa: -18, th: -62, sh: -98, at: ['ankle', 100, A] },
     ],
   },
   singleLegRdl: {
     props: [{ k: 'db', at: 'hand' }],
     frames: [
       { t: 90, ua: -88, fa: -88, th: -88, sh: -92, th2: -95, sh2: -100, at: ['ankle', 110, A] },
-      { t: 8, ua: -90, fa: -90, th: -78, sh: -95, th2: 188, sh2: 188, at: ['ankle', 110, A] },
+      { t: 6, ua: -100, fa: -100, th: -76, sh: -96, th2: 186, sh2: 186, at: ['ankle', 110, A] },
     ],
   },
   cableKickback: {
     props: [{ k: 'line', a: [170, 40], b: [170, 182], w: 5 }, { k: 'cable', from: [168, 176], to: 'ankle' }],
     frames: [
-      { t: 80, ua: -20, fa: -20, th: -95, sh: -95, th2: -90, sh2: -90, at: ['ankle2', 120, A] },
-      { t: 76, ua: -20, fa: -20, th: -150, sh: -145, th2: -90, sh2: -90, at: ['ankle2', 120, A] },
+      // Hands hold the machine, standing leg soft, working leg kicks back from the hip.
+      { t: 80, ik: [46, -11, 1], th: -95, sh: -95, th2: -90, sh2: -90, at: ['ankle2', 120, A] },
+      { t: 76, ik: [46, -11, 1], th: -150, sh: -145, th2: -90, sh2: -90, at: ['ankle2', 120, A] },
     ],
   },
   hipAbduction: {
-    props: [{ k: 'rect', x: 72, y: 132, w: 56, h: 7 }, { k: 'pad', at: 'knee', dy: -6, w: 10 }, { k: 'pad', at: 'knee2', dy: -6, w: 10 }],
+    props: [{ k: 'rect', x: 72, y: 132, w: 56, h: 7 }, { k: 'roll', at: 'knee', toward: 'knee2', d: -7 }, { k: 'roll', at: 'knee2', toward: 'knee', d: -7 }],
+    // Seated, seen from the front: the thighs point at the viewer (short) and open outwards
+    // against the pads on the outside of the knees.
     frames: [
-      { view: 'front', t: 90, ua: -100, fa: -90, th: -75, sh: -92, at: ['hip', 100, 128] },
-      { view: 'front', t: 90, ua: -100, fa: -90, th: -35, sh: -88, at: ['hip', 100, 128] },
+      { view: 'front', t: 90, ua: -66, fa: -86, th: -84, thl: 0.32, sh: -92, at: ['hip', 100, 128] },
+      { view: 'front', t: 90, ua: -66, fa: -86, th: -28, thl: 0.6, sh: -88, at: ['hip', 100, 128] },
     ],
   },
   wallSit: {
@@ -499,15 +573,16 @@ export const MOVES: Record<string, Move> = {
   inclineBench: {
     props: [{ k: 'line', a: [124, 142], b: [62, 92], w: 7 }, { k: 'line', a: [100, 146], b: [138, 146], w: 7 }, { k: 'line', a: [118, 150], b: [118, 182], w: 4 }, { k: 'bb', at: 'hand' }],
     frames: [
-      { t: 142, ua: 85, fa: 85, th: -10, sh: -95, at: ['hip', 120, 136] },
-      { t: 142, ua: -70, fa: 100, th: -10, sh: -95, at: ['hip', 120, 136] },
+      // Over the shoulders, lowered to the upper chest.
+      { t: 142, ik: [-39, -85, 1], th: -10, sh: -95, at: ['hip', 120, 136] },
+      { t: 142, ik: [-27, -37, 1], th: -10, sh: -95, at: ['hip', 120, 136] },
     ],
   },
   inclineDbPress: {
     props: [{ k: 'line', a: [124, 142], b: [62, 92], w: 7 }, { k: 'line', a: [100, 146], b: [138, 146], w: 7 }, { k: 'line', a: [118, 150], b: [118, 182], w: 4 }, { k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     frames: [
-      { t: 142, ua: 85, fa: 85, th: -10, sh: -95, at: ['hip', 120, 136] },
-      { t: 142, ua: -70, fa: 100, th: -10, sh: -95, at: ['hip', 120, 136] },
+      { t: 142, ik: [-39, -85, 1], th: -10, sh: -95, at: ['hip', 120, 136] },
+      { t: 142, ik: [-27, -37, 1], th: -10, sh: -95, at: ['hip', 120, 136] },
     ],
   },
   machineChestPress: {
@@ -521,15 +596,17 @@ export const MOVES: Record<string, Move> = {
     vb: [-10, -26, 220, 216],
     props: [{ k: 'db', at: 'hand2' }, { k: 'db', at: 'hand' }],
     frames: [
-      { t: 90, ua: -55, fa: 105, at: ['ankle', 100, A] },
-      { t: 90, ua: 88, fa: 88, at: ['ankle', 100, A] },
+      // Dumbbells in front of the face, elbows forward; they turn out as they go straight up.
+      { t: 90, ik: [14, -62, 1], at: ['ankle', 100, A] },
+      { t: 90, ik: [2, -104, 1], at: ['ankle', 100, A] },
     ],
   },
   landminePress: {
-    props: [{ k: 'rod', from: [28, 180], to: 'hand' }, { k: 'pad', at: 'hand', dy: -3, w: 12 }],
+    // The bar's anchor is on the floor in front; the end of the bar is pressed up and forward.
+    props: [{ k: 'rod', from: [196, 180], to: 'hand' }, { k: 'grip', at: 'hand' }],
     frames: [
-      { t: 86, ik: [14, -50, -1], th: -75, sh: -95, th2: -105, sh2: -95, at: ['ground', 95] },
-      { t: 84, ik: [46, -92, -1], th: -75, sh: -95, th2: -105, sh2: -95, at: ['ground', 95] },
+      { t: 86, ik: [14, -50, 1], th: -75, sh: -95, th2: -105, sh2: -95, at: ['ground', 95] },
+      { t: 82, ik: [50, -68, 1], th: -75, sh: -95, th2: -105, sh2: -95, at: ['ground', 95] },
     ],
   },
   frontRaise: {
@@ -547,17 +624,17 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   inclinePushUp: {
-    props: [...bench(14, 140, 56)],
-    frames: [
-      { t: 136, ua: -90, fa: -90, th: -44, sh: -44, ft: -100, at: ['ankle', 168, 176] },
-      { t: 157, ua: 30, fa: -118, th: -23, sh: -23, ft: -100, at: ['ankle', 168, 176] },
-    ],
+    props: [...bench(30, 145, 56)],
+    frames: handsFixed(
+      { t: 136, ua: -90, fa: -90, th: -44, sh: -44, ft: -100, at: ['ankle', 168, 172] },
+      { t: 157, th: -23, sh: -23, ft: -100, at: ['ankle', 168, 172] },
+    ),
   },
   kneePushUp: {
-    frames: [
+    frames: handsFixed(
       { t: 145, ua: -90, fa: -90, th: -35, sh: 0, ft: 90, at: ['knee', 140, 176] },
-      { t: 170, ua: 32, fa: -118, th: -10, sh: 0, ft: 90, at: ['knee', 140, 176] },
-    ],
+      { t: 170, th: -10, sh: 0, ft: 90, at: ['knee', 140, 176] },
+    ),
   },
   skullCrusher: {
     props: [...bench(30, 120, 120), { k: 'bb', at: 'hand' }],
@@ -568,23 +645,24 @@ export const MOVES: Record<string, Move> = {
   },
   benchDip: {
     props: [...bench(22, 140, 46)],
+    // Hands on the bench behind, heels stay on the floor, hips drop straight down by the bench.
     frames: [
-      { t: 94, ua: -100, fa: -100, th: 0, sh: -85, at: ['hand', 66, 139] },
-      { t: 86, ua: -160, fa: -58, th: 12, sh: -78, at: ['hand', 66, 139] },
-    ],
+      { t: 94, ua: -100, fa: -100, ft: 80, at: ['hand', 66, 139] },
+      { t: 86, ua: -160, fa: -58, ft: 80, at: ['hand', 66, 139] },
+    ].map((p) => ({ ...p, ikL: to(p as Pose, 130, 176, -1) }) as Pose),
   },
   tBarRow: {
     props: [{ k: 'rod', from: [22, 180], to: 'hand' }, { k: 'plate', at: 'hand' }],
     frames: [
-      { t: 30, ua: -90, fa: -90, th: -65, sh: -100, at: ['ankle', 110, A] },
-      { t: 30, ua: -160, fa: -90, th: -65, sh: -100, at: ['ankle', 110, A] },
+      { t: 30, ik: [49, 27, 1], th: -65, sh: -100, at: ['ankle', 110, A] },
+      { t: 30, ik: [31, -5, 1], th: -65, sh: -100, at: ['ankle', 110, A] },
     ],
   },
   chestSupportedRow: {
-    props: [{ k: 'line', a: [70, 136], b: [128, 92], w: 7 }, { k: 'line', a: [96, 120], b: [96, 182], w: 4 }, { k: 'db', at: 'hand' }],
+    props: [{ k: 'line', a: [86, 107], b: [118, 83], w: 7 }, { k: 'line', a: [100, 98], b: [100, 182], w: 4 }, { k: 'db', at: 'hand' }],
     frames: [
-      { t: 38, ua: -90, fa: -90, th: -70, sh: -95, at: ['hip', 70, 128] },
-      { t: 38, ua: -165, fa: -90, th: -70, sh: -95, at: ['hip', 70, 128] },
+      { t: 38, ua: -90, fa: -90, th: -70, sh: -95, at: ['hip', 70, 106] },
+      { t: 38, ua: -165, fa: -90, th: -70, sh: -95, at: ['hip', 70, 106] },
     ],
   },
   invertedRow: {
@@ -616,7 +694,8 @@ export const MOVES: Record<string, Move> = {
     ],
   },
   preacherCurl: {
-    props: [{ k: 'rect', x: 62, y: 140, w: 42, h: 7 }, { k: 'line', a: [96, 112], b: [120, 132], w: 7 }, { k: 'line', a: [110, 132], b: [110, 182], w: 4 }, { k: 'db', at: 'hand' }],
+    // The back of the upper arm rests on the angled pad.
+    props: [{ k: 'rect', x: 62, y: 140, w: 42, h: 7 }, { k: 'line', a: [74, 98], b: [99, 118], w: 7 }, { k: 'line', a: [98, 118], b: [96, 140], w: 4 }, { k: 'line', a: [88, 147], b: [88, 182], w: 4 }, { k: 'db', at: 'hand' }],
     frames: [
       { t: 98, ua: -38, fa: -55, th: 0, sh: -90, at: ['hip', 78, 136] },
       { t: 98, ua: -38, fa: 95, th: 0, sh: -90, at: ['hip', 78, 136] },
@@ -638,7 +717,7 @@ export const MOVES: Record<string, Move> = {
   hangingLegRaise: {
     noFloor: true,
     vb: [0, -8, 200, 200],
-    props: [{ k: 'line', a: [84, 0], b: [84, 190], w: 4 }, { k: 'grip', at: 'hand' }],
+    props: [{ k: 'line', a: [62, 10], b: [118, 10], w: 5 }],
     frames: [
       { t: 90, ua: 92, fa: 92, th: -92, sh: -92, at: ['hand', 90, 10] },
       { t: 100, ua: 92, fa: 92, th: 5, sh: 5, at: ['hand', 90, 10] },
@@ -646,17 +725,25 @@ export const MOVES: Record<string, Move> = {
   },
   mountainClimber: {
     loop: true,
-    ms: 260,
-    frames: [
-      { t: 155, ua: -90, fa: -90, th: -150, sh: -60, th2: -25, sh2: -25, ft: -100, ft2: -100, at: ['hand', 62, 178] },
-      { t: 155, ua: -90, fa: -90, th: -25, sh: -25, th2: -150, sh2: -60, ft: -100, ft2: -100, at: ['hand', 62, 178] },
-    ],
+    ms: 170,
+    // Hands planted under the shoulders; knees drive towards the chest in turn.
+    frames: (() => {
+      const base: Pose = { t: 158, ua: -90, fa: -90, ft: -100, ft2: -100, at: ['hand', 62, 178] };
+      const tuck: V = [102, 166];
+      const out: V = [178, 176];
+      const a: Pose = { ...base, ikL: to(base, tuck[0], tuck[1], 1), ikL2: to(base, out[0], out[1], 1) };
+      const b: Pose = { ...base, ikL: to(base, out[0], out[1], 1), ikL2: to(base, tuck[0], tuck[1], 1) };
+      // A short hold in each position and a quick switch.
+      return [a, a, b, b];
+    })(),
   },
   pallofPress: {
-    props: [{ k: 'cable', from: [4, 112], to: 'hand' }, { k: 'grip', at: 'hand' }],
+    // Seen from the front: the cable pulls sideways, the hands press straight out from the
+    // chest (towards you) and the torso resists turning.
+    props: [{ k: 'line', a: [10, 40], b: [10, 182], w: 5 }, { k: 'cable', from: [12, 92], to: 'hand' }, { k: 'grip', at: 'hand' }],
     frames: [
-      { t: 90, ik: [16, -40, 1], th: -95, sh: -88, at: ['ankle', 100, A] },
-      { t: 90, ik: [54, -42, 1], th: -95, sh: -88, at: ['ankle', 100, A] },
+      { view: 'front', t: 90, ik: [0, -34, -1], th: -97, sh: -90, at: ['ground', 104] },
+      { view: 'front', t: 90, ik: [0, -34, -1], al: 0.45, th: -97, sh: -90, at: ['ground', 104] },
     ],
   },
   bicycleCrunch: {
@@ -677,13 +764,17 @@ export const MOVES: Record<string, Move> = {
   burpee: {
     loop: true,
     ms: 420,
-    frames: [
-      { t: 90, ua: -90, fa: -90, at: ['ground', 100] },
-      { t: 35, ua: -100, fa: -100, th: 15, sh: -112, at: ['ground', 100] },
-      { t: 155, ua: -92, fa: -92, th: -25, sh: -25, ft: -100, ft2: -100, at: ['ground', 100] },
-      { t: 35, ua: -100, fa: -100, th: 15, sh: -112, at: ['ground', 100] },
-      { t: 92, ua: 88, fa: 88, at: ['ground', 100] },
-    ],
+    vb: [-10, -26, 220, 216],
+    // Stand, squat with the hands on the floor, jump the feet back to a plank (hands stay
+    // put), jump them back in, then jump up with the arms overhead.
+    frames: (() => {
+      const stand = pin({ t: 90, ua: -90, fa: -90 }, 'ankle', 130, A);
+      const squat = pin({ t: 30, th: 15, sh: -112, ua: -95, fa: -95 }, 'ankle', 130, A);
+      const h = pos(squat, 'hand');
+      const plank = pin({ t: 21, th: -159, sh: -159, ua: -90, fa: -90, ft: -70, ft2: -70 }, 'hand', h[0], h[1]);
+      const jump = pin({ t: 92, ua: 88, fa: 88, sh: -96, ft: -70, ft2: -70 }, 'ankle', 130, A - 12);
+      return [stand, squat, plank, squat, jump];
+    })(),
   },
   jumpingJacks: {
     loop: true,

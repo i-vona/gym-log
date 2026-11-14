@@ -12,8 +12,8 @@
   --skin: #c0c7d1;
   --muscle: #dde1e7;
   --muscle-line: #a5aebb;
-  --m1: #d9363e;
-  --m2: #f2a3a0;
+  --m1: #dc2626;
+  --m2: #f97316;
   --equip: #3f3f46;
   --radius: 14px;
   color-scheme: light dark;
@@ -36,7 +36,7 @@
     --muscle: #5d6777;
     --muscle-line: #2c323b;
     --m1: #f0525a;
-    --m2: #a3484c;
+    --m2: #fb923c;
     --equip: #d6d3d1;
   }
 }
@@ -252,7 +252,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .a-skin { fill: var(--skin); }
 .a-mu, .a-m1, .a-m2 { fill: var(--muscle); stroke: var(--muscle-line); stroke-width: 0.6; stroke-linejoin: round; }
 .a-m1 { fill: var(--m1); }
-.a-m2 { fill: var(--m2); }
+.a-m2 { fill: var(--m2); fill-opacity: 0.55; }
 .a-line { stroke: var(--muscle-line); stroke-linecap: round; }
 .a-dim { opacity: 0.55; }
 .a-heart { fill: var(--m1); transform-box: fill-box; transform-origin: center; animation: beat 0.9s ease-in-out infinite; }
@@ -275,7 +275,7 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 10px 3px 8px; border-radius: 999px; background: var(--surface-2); }
 .chip::before { content: ''; width: 9px; height: 9px; border-radius: 999px; }
 .chip-m1::before { background: var(--m1); }
-.chip-m2::before { background: var(--m2); }
+.chip-m2::before { background: var(--m2); opacity: 0.55; }
 
 /* Follow-along screen */
 .start-btn { font-size: 17px; }
@@ -342,9 +342,13 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 170px); }
 
 /* Full-page exercise info */
 .page {
-  position: fixed; inset: 0; z-index: 30; overflow-y: auto;
+  position: fixed; inset: 0; z-index: 30; overflow-y: auto; overscroll-behavior: contain;
   background: var(--bg); padding-top: env(safe-area-inset-top);
 }
+/* While a full-screen layer is open, the screen underneath must not scroll (otherwise its
+   scrollbar and scroll chaining move a page you can't see). */
+html:has(.page), html:has(.focus), html:has(.sheet-backdrop) { overflow: hidden; }
+.sheet, .focus-body { overscroll-behavior: contain; }
 .page-head {
   position: sticky; top: 0; z-index: 1;
   display: flex; align-items: center; gap: 12px; padding: 10px 16px;
